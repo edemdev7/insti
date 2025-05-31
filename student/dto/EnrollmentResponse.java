@@ -4,24 +4,26 @@ package com.payiskoul.institution.student.dto;
 import com.payiskoul.institution.student.model.Enrollment;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
-@Schema(description = "Réponse pour une inscription à un programme")
+@Schema(description = "Réponse d'inscription à une offre")
 public record EnrollmentResponse(
-        @Schema(description = "ID unique de l'inscription", example = "66101243b3f2e6745e0d1ab7")
+        @Schema(description = "ID de l'inscription", example = "enroll-001")
         String id,
 
-        @Schema(description = "ID de l'étudiant", example = "660fa3dfedc9f62233a9db77")
-        String studentId,
+        @Schema(description = "Informations de l'étudiant")
+        StudentInfo student,
 
-        @Schema(description = "ID du niveau/programme", example = "660fb32ccf403c04dbd37ee4")
-        String levelId,
+        @Schema(description = "Informations de l'offre")
+        OfferInfo offer,
 
-        @Schema(description = "Année académique", example = "2024-2025")
-        String academicYear,
+        @Schema(description = "ID de l'institution", example = "664f82a9e9d034f2fca9b0e2")
+        String institutionId,
+
+        @Schema(description = "ID de la classe assignée", example = "664f82a9e9d034f2fca9b0e1")
+        String classroomId,
+
+        @Schema(description = "Date d'inscription", example = "2024-05-25T09:30:00Z")
+        LocalDateTime enrolledAt,
 
         @Schema(description = "Statut de l'inscription", example = "ENROLLED")
-        Enrollment.EnrollmentStatus status,
-
-        @Schema(description = "Date d'inscription", example = "2025-04-17T10:15:30Z")
-        LocalDateTime registeredAt
-) {
-}
+        Enrollment.EnrollmentStatus status
+) {}

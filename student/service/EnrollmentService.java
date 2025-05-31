@@ -6,7 +6,7 @@ import com.payiskoul.institution.exception.EnrollmentAlreadyExistsException;
 import com.payiskoul.institution.exception.ErrorCode;
 import com.payiskoul.institution.exception.ProgramLevelNotFoundException;
 import com.payiskoul.institution.exception.StudentNotFoundException;
-import com.payiskoul.institution.program.model.ProgramLevel;
+import com.payiskoul.institution.program.model.TrainingOffer;
 import com.payiskoul.institution.program.repository.ProgramLevelRepository;
 import com.payiskoul.institution.student.dto.CreateEnrollmentRequest;
 import com.payiskoul.institution.student.dto.EnrollmentResponse;
