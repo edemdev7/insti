@@ -5,10 +5,8 @@ import com.payiskoul.institution.classroom.repository.ClassroomRepository;
 import com.payiskoul.institution.exception.BusinessException;
 import com.payiskoul.institution.exception.EnrollmentAlreadyExistsException;
 import com.payiskoul.institution.exception.ErrorCode;
-import com.payiskoul.institution.exception.ProgramLevelNotFoundException;
-import com.payiskoul.institution.organization.repository.InstitutionRepository;
-import com.payiskoul.institution.program.model.ProgramLevel;
-import com.payiskoul.institution.program.repository.ProgramLevelRepository;
+import com.payiskoul.institution.program.model.TrainingOffer;
+import com.payiskoul.institution.program.repository.TrainingOfferRepository;
 import com.payiskoul.institution.student.dto.CreateStudentRequest;
 import com.payiskoul.institution.student.dto.FailedImportRecord;
 import com.payiskoul.institution.student.dto.StudentImportResult;
@@ -32,13 +30,16 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.*;
 
+/**
+ * Service d'importation d'étudiants mis à jour pour utiliser le modèle unifié TrainingOffer
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class StudentImportService {
 
     private final StudentRepository studentRepository;
-    private final ProgramLevelRepository programLevelRepository;
+    private final TrainingOfferRepository trainingOfferRepository; // Remplace ProgramLevelRepository
     private final ClassroomRepository classroomRepository;
     private final StudentService studentService;
     private final EnrollmentService enrollmentService;
@@ -47,70 +48,18 @@ public class StudentImportService {
      * Importe des étudiants depuis un fichier CSV
      *
      * @param file        Fichier CSV contenant les données des étudiants
-     * @param programId   ID du programme auquel inscrire les étudiants
+     * @param offerId     ID de l'offre à laquelle inscrire les étudiants (remplace programId)
      * @param classroomId ID de la classe (optionnel)
      * @return Résultat de l'importation
      */
-//    @Transactional
-//    public StudentImportResult importStudentsFromCsv(MultipartFile file, String programId, String classroomId) {
-//        log.info("Début de l'importation d'étudiants depuis un fichier CSV pour le programme {}", programId);
-//
-//        // Vérifier que le programme existe
-//        programLevelRepository.findById(programId)
-//                .orElseThrow(() -> new BusinessException(ErrorCode.PROGRAM_LEVEL_NOT_FOUND,
-//                        "Le programme spécifié n'existe pas", Map.of("programId", programId)));
-//
-//        // Vérifier que la classe existe si spécifiée
-//        if (classroomId != null && !classroomId.isEmpty()) {
-//            classroomRepository.findById(classroomId)
-//                    .orElseThrow(() -> new BusinessException(ErrorCode.CLASSROOM_NOT_FOUND,
-//                            "La classe spécifiée n'existe pas", Map.of("classroomId", classroomId)));
-//        }
-//
-//        List<Map<String, String>> records = parseCsvFile(file);
-//        List<FailedImportRecord> failedRecords = new ArrayList<>();
-//        int successCount = 0;
-//
-//        for (Map<String, String> studentRecord : records) {
-//            try {
-//                // Créer la requête
-//                CreateStudentRequest request = createRequestFromRecord(studentRecord, programId, classroomId);
-//
-//                // Vérifier si l'email existe déjà
-//                if (studentRepository.existsByEmail(request.email())) {
-//                    failedRecords.add(new FailedImportRecord(
-//                            studentRecord,
-//                            "Un étudiant avec cet email existe déjà"
-//                    ));
-//                    continue;
-//                }
-//
-//                // Créer l'étudiant
-//                studentService.createStudent(request);
-//                successCount++;
-//
-//            } catch (Exception e) {
-//                log.error("Erreur lors de l'importation d'un étudiant: {}", e.getMessage());
-//                failedRecords.add(new FailedImportRecord(
-//                        studentRecord,
-//                        e.getMessage()
-//                ));
-//            }
-//        }
-//
-//        log.info("Importation terminée. {} étudiants importés avec succès, {} échecs",
-//                successCount, failedRecords.size());
-//
-//        return new StudentImportResult(successCount, failedRecords.size(), failedRecords);
-//    }
     @Transactional
-    public StudentImportResult importStudentsFromCsv(MultipartFile file, String programId, String classroomId) {
-        log.info("Début de l'importation d'étudiants depuis un fichier CSV pour le programme {}", programId);
+    public StudentImportResult importStudentsFromCsv(MultipartFile file, String offerId, String classroomId) {
+        log.info("Début de l'importation d'étudiants depuis un fichier CSV pour l'offre {}", offerId);
 
-        // Vérifier que le programme existe
-        programLevelRepository.findById(programId)
+        // Vérifier que l'offre existe (remplace la vérification de programme)
+        TrainingOffer trainingOffer = trainingOfferRepository.findById(offerId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PROGRAM_LEVEL_NOT_FOUND,
-                        "Le programme spécifié n'existe pas", Map.of("programId", programId)));
+                        "L'offre spécifiée n'existe pas", Map.of("offerId", offerId)));
 
         // Vérifier que la classe existe si spécifiée
         if (classroomId != null && !classroomId.isEmpty()) {
@@ -130,11 +79,11 @@ public class StudentImportService {
 
                 if (matricule.isEmpty() || matricule.isBlank()) {
                     // Cas 1: Nouvel étudiant à créer
-                    processNewStudent(studentRecord, programId, classroomId, failedRecords);
+                    processNewStudent(studentRecord, offerId, classroomId, failedRecords);
                     successCount++;
                 } else {
                     // Cas 2: Étudiant existant à inscrire
-                    processExistingStudent(matricule, programId, classroomId, failedRecords);
+                    processExistingStudent(matricule, offerId, classroomId, failedRecords);
                     successCount++;
                 }
             } catch (Exception e) {
@@ -152,75 +101,22 @@ public class StudentImportService {
         return new StudentImportResult(successCount, failedRecords.size(), failedRecords);
     }
 
-//    /**
-//     * Importe des étudiants depuis un fichier Excel
-//     *
-//     * @param file        Fichier Excel contenant les données des étudiants
-//     * @param programId   ID du programme auquel inscrire les étudiants
-//     * @param classroomId ID de la classe (optionnel)
-//     * @return Résultat de l'importation
-//     */
-//    @Transactional
-//    public StudentImportResult importStudentsFromExcel(MultipartFile file, String programId, String classroomId) {
-//        log.info("Début de l'importation d'étudiants depuis un fichier Excel pour le programme {}", programId);
-//
-//        // Vérifier que le programme existe
-//        programLevelRepository.findById(programId)
-//                .orElseThrow(() -> new BusinessException(ErrorCode.PROGRAM_LEVEL_NOT_FOUND,
-//                        "Le programme spécifié n'existe pas", Map.of("programId", programId)));
-//
-//        // Vérifier que la classe existe si spécifiée
-//        if (classroomId != null && !classroomId.isEmpty()) {
-//            classroomRepository.findById(classroomId)
-//                    .orElseThrow(() -> new BusinessException(ErrorCode.CLASSROOM_NOT_FOUND,
-//                            "La classe spécifiée n'existe pas", Map.of("classroomId", classroomId)));
-//        }
-//
-//        List<Map<String, String>> records = parseExcelFile(file);
-//        List<FailedImportRecord> failedRecords = new ArrayList<>();
-//        int successCount = 0;
-//
-//        for (Map<String, String> entry : records) {
-//            try {
-//                // Créer la requête
-//                CreateStudentRequest request = createRequestFromRecord(entry, programId, classroomId);
-//
-//                // Vérifier si l'email existe déjà
-//                if (studentRepository.existsByEmail(request.email())) {
-//                    failedRecords.add(new FailedImportRecord(
-//                            entry,
-//                            "Un étudiant avec cet email existe déjà"
-//                    ));
-//                    continue;
-//                }
-//
-//                // Créer l'étudiant
-//                studentService.createStudent(request);
-//                successCount++;
-//
-//            } catch (Exception e) {
-//                log.error("Erreur lors de l'importation d'un étudiant: {}", e.getMessage());
-//                failedRecords.add(new FailedImportRecord(
-//                        entry,
-//                        e.getMessage()
-//                ));
-//            }
-//        }
-//
-//        log.info("Importation terminée. {} étudiants importés avec succès, {} échecs",
-//                successCount, failedRecords.size());
-//
-//        return new StudentImportResult(successCount, failedRecords.size(), failedRecords);
-//    }
-
+    /**
+     * Importe des étudiants depuis un fichier Excel
+     *
+     * @param file        Fichier Excel contenant les données des étudiants
+     * @param offerId     ID de l'offre à laquelle inscrire les étudiants (remplace programId)
+     * @param classroomId ID de la classe (optionnel)
+     * @return Résultat de l'importation
+     */
     @Transactional
-    public StudentImportResult importStudentsFromExcel(MultipartFile file, String programId, String classroomId) {
-        log.info("Début de l'importation d'étudiants depuis un fichier Excel pour le programme {}", programId);
+    public StudentImportResult importStudentsFromExcel(MultipartFile file, String offerId, String classroomId) {
+        log.info("Début de l'importation d'étudiants depuis un fichier Excel pour l'offre {}", offerId);
 
-        // Vérifier que le programme existe
-        ProgramLevel program = programLevelRepository.findById(programId)
+        // Vérifier que l'offre existe
+        TrainingOffer trainingOffer = trainingOfferRepository.findById(offerId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PROGRAM_LEVEL_NOT_FOUND,
-                        "Le programme spécifié n'existe pas", Map.of("programId", programId)));
+                        "L'offre spécifiée n'existe pas", Map.of("offerId", offerId)));
 
         // Vérifier que la classe existe si spécifiée
         if (classroomId != null && !classroomId.isEmpty()) {
@@ -240,11 +136,11 @@ public class StudentImportService {
 
                 if (matricule.isEmpty() || matricule.isBlank()) {
                     // Cas 1: Nouvel étudiant à créer
-                    processNewStudent(studentRecord, programId, classroomId, failedRecords);
+                    processNewStudent(studentRecord, offerId, classroomId, failedRecords);
                     successCount++;
                 } else {
                     // Cas 2: Étudiant existant à inscrire
-                    processExistingStudent(matricule, programId, classroomId, failedRecords);
+                    processExistingStudent(matricule, offerId, classroomId, failedRecords);
                     successCount++;
                 }
             } catch (Exception e) {
@@ -261,20 +157,22 @@ public class StudentImportService {
 
         return new StudentImportResult(successCount, failedRecords.size(), failedRecords);
     }
+
     /**
      * Génère un template Excel pour l'importation d'étudiants
      *
-     * @param programId   ID du programme
+     * @param offerId     ID de l'offre (remplace programId)
      * @param classroomId ID de la classe (optionnel)
      * @return Tableau d'octets représentant le fichier Excel
      * @throws IOException En cas d'erreur lors de la génération du fichier
      */
-    public byte[] generateExcelTemplate(String programId, String classroomId) throws IOException {
-        log.info("Génération d'un template Excel pour le programme {}", programId);
+    public byte[] generateExcelTemplate(String offerId, String classroomId) throws IOException {
+        log.info("Génération d'un template Excel pour l'offre {}", offerId);
 
-        // Vérifier que le programme existe
-        ProgramLevel program = programLevelRepository.findById(programId)
-                .orElseThrow(() -> new ProgramLevelNotFoundException(programId));
+        // Vérifier que l'offre existe
+        TrainingOffer trainingOffer = trainingOfferRepository.findById(offerId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PROGRAM_LEVEL_NOT_FOUND,
+                        "L'offre spécifiée n'existe pas", Map.of("offerId", offerId)));
 
         // Récupérer la classe si spécifiée
         Classroom classroom = null;
@@ -297,14 +195,14 @@ public class StudentImportService {
             headerStyle.setFillForegroundColor(IndexedColors.LIGHT_BLUE.getIndex());
             headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
 
-            // Entête avec informations sur le programme
-            Row programRow = sheet.createRow(0);
-            Cell programLabelCell = programRow.createCell(0);
-            programLabelCell.setCellValue("Programme:");
-            programLabelCell.setCellStyle(headerStyle);
+            // Entête avec informations sur l'offre (remplace programme)
+            Row offerRow = sheet.createRow(0);
+            Cell offerLabelCell = offerRow.createCell(0);
+            offerLabelCell.setCellValue("Offre:");
+            offerLabelCell.setCellStyle(headerStyle);
 
-            Cell programValueCell = programRow.createCell(1);
-            programValueCell.setCellValue(program.getName());
+            Cell offerValueCell = offerRow.createCell(1);
+            offerValueCell.setCellValue(trainingOffer.getLabel() + " (" + trainingOffer.getCode() + ")");
 
             // Classe si spécifiée
             if (classroom != null) {
@@ -317,19 +215,9 @@ public class StudentImportService {
                 classroomValueCell.setCellValue(classroom.getName());
             }
 
-//            // En-têtes des colonnes
-//            String[] columns = {"Nom complet", "Genre (MALE/FEMALE)", "Date de naissance (YYYY-MM-DD)", "Email", "Téléphone"};
-//            Row headerRow = sheet.createRow(classroom != null ? 3 : 2);
-//
-//            for (int i = 0; i < columns.length; i++) {
-//                Cell cell = headerRow.createCell(i);
-//                cell.setCellValue(columns[i]);
-//                cell.setCellStyle(headerStyle);
-//                sheet.setColumnWidth(i, 6000);
-//            }
-
             // En-têtes des colonnes
-            String[] columns = {"Matricule (optionnel)", "Nom complet", "Genre (MALE/FEMALE)", "Date de naissance (YYYY-MM-DD)", "Email", "Téléphone"};
+            String[] columns = {"Matricule (optionnel)", "Nom complet", "Genre (MALE/FEMALE)",
+                    "Date de naissance (YYYY-MM-DD)", "Email", "Téléphone"};
             Row headerRow = sheet.createRow(classroom != null ? 3 : 2);
 
             for (int i = 0; i < columns.length; i++) {
@@ -364,50 +252,40 @@ public class StudentImportService {
         }
     }
 
-//    /**
-//     * Parse un fichier CSV et retourne les enregistrements sous forme de liste de maps
-//     *
-//     * @param file Fichier CSV à parser
-//     * @return Liste des enregistrements
-//     */
-//    private List<Map<String, String>> parseCsvFile(MultipartFile file) {
-//        List<Map<String, String>> records = new ArrayList<>();
-//
-//        try (InputStream is = file.getInputStream();
-//             InputStreamReader reader = new InputStreamReader(is);
-//             com.opencsv.CSVReader csvReader = new com.opencsv.CSVReader(reader)) {
-//
-//            // Lecture des en-têtes
-//            String[] headers = csvReader.readNext();
-//            if (headers == null) {
-//                throw new BusinessException(ErrorCode.INVALID_FILE_FORMAT,
-//                        "Le fichier CSV ne contient pas d'en-têtes", null);
-//            }
-//
-//            // Lecture des données
-//            String[] line;
-//
-//            while ((line = csvReader.readNext()) != null) {
-//                if (line.length < headers.length) {
-//                    continue; // Ignorer les lignes incomplètes
-//                }
-//
-//                Map<String, String> entry = new HashMap<>();
-//                for (int i = 0; i < headers.length; i++) {
-//                    entry.put(headers[i].trim(), i < line.length ? line[i].trim() : "");
-//                }
-//
-//                records.add(entry);
-//            }
-//
-//        } catch (Exception e) {
-//            log.error("Erreur lors de la lecture du fichier CSV: {}", e.getMessage());
-//            throw new BusinessException(ErrorCode.INVALID_FILE_FORMAT,
-//                    "Erreur lors de la lecture du fichier CSV: " + e.getMessage(), null);
-//        }
-//
-//        return records;
-//    }
+    // ============ MÉTHODES DE COMPATIBILITÉ ============
+
+    /**
+     * Méthode de compatibilité pour l'importation CSV avec programId
+     * @deprecated Utiliser importStudentsFromCsv(file, offerId, classroomId)
+     */
+    @Deprecated
+    public StudentImportResult importStudentsFromCsvWithProgramId(MultipartFile file, String programId, String classroomId) {
+        log.warn("Utilisation de la méthode dépréciée importStudentsFromCsvWithProgramId - migrer vers importStudentsFromCsv avec offerId");
+        return importStudentsFromCsv(file, programId, classroomId);
+    }
+
+    /**
+     * Méthode de compatibilité pour l'importation Excel avec programId
+     * @deprecated Utiliser importStudentsFromExcel(file, offerId, classroomId)
+     */
+    @Deprecated
+    public StudentImportResult importStudentsFromExcelWithProgramId(MultipartFile file, String programId, String classroomId) {
+        log.warn("Utilisation de la méthode dépréciée importStudentsFromExcelWithProgramId - migrer vers importStudentsFromExcel avec offerId");
+        return importStudentsFromExcel(file, programId, classroomId);
+    }
+
+    /**
+     * Méthode de compatibilité pour la génération de template avec programId
+     * @deprecated Utiliser generateExcelTemplate(offerId, classroomId)
+     */
+    @Deprecated
+    public byte[] generateExcelTemplateWithProgramId(String programId, String classroomId) throws IOException {
+        log.warn("Utilisation de la méthode dépréciée generateExcelTemplateWithProgramId - migrer vers generateExcelTemplate avec offerId");
+        return generateExcelTemplate(programId, classroomId);
+    }
+
+    // ============ MÉTHODES PRIVÉES ============
+
     /**
      * Parse un fichier CSV et retourne les enregistrements sous forme de liste de maps
      * @param file Fichier CSV à parser
@@ -457,61 +335,6 @@ public class StudentImportService {
         return records;
     }
 
-//    /**
-//     * Parse un fichier Excel et retourne les enregistrements sous forme de liste de maps
-//     *
-//     * @param file Fichier Excel à parser
-//     * @return Liste des enregistrements
-//     */
-//    private List<Map<String, String>> parseExcelFile(MultipartFile file) {
-//        List<Map<String, String>> lines = new ArrayList<>();
-//
-//        try (InputStream is = file.getInputStream();
-//             Workbook workbook = WorkbookFactory.create(is)) {
-//
-//            // Lecture de la première feuille
-//            Sheet sheet = workbook.getSheetAt(0);
-//            Iterator<Row> rowIterator = sheet.iterator();
-//
-//            // Déterminer la ligne d'en-tête (ignorer les lignes d'information sur le programme)
-//            Row headerRow = null;
-//            while (rowIterator.hasNext()) {
-//                Row row = rowIterator.next();
-//                Cell firstCell = row.getCell(0);
-//                if (firstCell != null && firstCell.getCellType() == CellType.STRING) {
-//                    String value = firstCell.getStringCellValue();
-//                    if (!value.contains(":") && !value.isEmpty()) {
-//                        headerRow = row;
-//                        break;
-//                    }
-//                }
-//            }
-//
-//            if (headerRow == null) {
-//                throw new BusinessException(ErrorCode.INVALID_FILE_FORMAT,
-//                        "Le fichier Excel ne contient pas d'en-têtes valides", null);
-//            }
-//
-//            // Lecture des en-têtes
-//            List<String> headers = new ArrayList<>();
-//            for (Cell cell : headerRow) {
-//                if (cell.getCellType() == CellType.STRING && !cell.getStringCellValue().isEmpty()) {
-//                    headers.add(cell.getStringCellValue().trim());
-//                }
-//            }
-//
-//            // Lecture des données
-//            readData(headers, rowIterator, lines);
-//
-//        } catch (Exception e) {
-//            log.error("Erreur lors de la lecture du fichier Excel: {}", e.getMessage());
-//            throw new BusinessException(ErrorCode.INVALID_FILE_FORMAT,
-//                    "Erreur lors de la lecture du fichier Excel: " + e.getMessage(), null);
-//        }
-//
-//        return lines;
-//    }
-
     /**
      * Parse un fichier Excel et retourne les enregistrements sous forme de liste de maps
      * @param file Fichier Excel à parser
@@ -527,7 +350,7 @@ public class StudentImportService {
             Sheet sheet = workbook.getSheetAt(0);
             Iterator<Row> rowIterator = sheet.iterator();
 
-            // Déterminer la ligne d'en-tête (ignorer les lignes d'information sur le programme)
+            // Déterminer la ligne d'en-tête (ignorer les lignes d'information sur l'offre)
             Row headerRow = null;
             while (rowIterator.hasNext()) {
                 Row row = rowIterator.next();
@@ -571,11 +394,11 @@ public class StudentImportService {
      * Crée une requête de création d'étudiant à partir d'un enregistrement
      *
      * @param studentRecord Enregistrement contenant les données de l'étudiant
-     * @param programId     ID du programme
+     * @param offerId       ID de l'offre (remplace programId)
      * @param classroomId   ID de la classe (optionnel)
      * @return Requête de création d'étudiant
      */
-    private CreateStudentRequest createRequestFromRecord(Map<String, String> studentRecord, String programId, String classroomId) {
+    private CreateStudentRequest createRequestFromRecord(Map<String, String> studentRecord, String offerId, String classroomId) {
         // Récupération des données avec validation
         String fullName = getRequiredField(studentRecord, "fullName", "Nom complet");
 
@@ -609,53 +432,80 @@ public class StudentImportService {
         // Récupération du téléphone
         String phone = getRequiredField(studentRecord, "phone", "Téléphone");
 
-        // Création de la requête
+        // Création de la requête (programId devient offerId)
         return new CreateStudentRequest(
                 fullName,
                 gender,
                 birthDate,
                 email,
                 phone,
-                programId,
+                offerId, // Changement: utilise offerId au lieu de programId
                 classroomId
         );
     }
 
     /**
-     * Récupère un champ obligatoire d'un enregistrement
-     *
-     * @param entry     Enregistrement
-     * @param key       Clé du champ
-     * @param fieldName Nom du champ pour les messages d'erreur
-     * @return Valeur du champ
+     * Traite un nouvel étudiant (création + inscription)
      */
-//    private String getRequiredField(Map<String, String> entry, String key, String fieldName) {
-//        // Essayer différentes variantes de la clé (camelCase, normale, minuscules)
-//        String value = entry.get(key);
-//
-//        if (value == null || value.isEmpty()) {
-//            // Essayer avec la première lettre en majuscule
-//            String altKey = key.substring(0, 1).toUpperCase() + key.substring(1);
-//            value = entry.get(altKey);
-//
-//            if (value == null || value.isEmpty()) {
-//                // Essayer avec le nom du champ
-//                value = entry.get(fieldName);
-//
-//                if (value == null || value.isEmpty()) {
-//                    // Essayer avec le nom du champ en minuscules
-//                    value = entry.get(fieldName.toLowerCase());
-//                }
-//            }
-//        }
-//
-//        if (value == null || value.isEmpty()) {
-//            throw new BusinessException(ErrorCode.INVALID_INPUT,
-//                    fieldName + " manquant ou vide", Map.of("field", key));
-//        }
-//
-//        return value.trim();
-//    }
+    private void processNewStudent(Map<String, String> studentRecord, String offerId, String classroomId,
+                                   List<FailedImportRecord> failedRecords) {
+        // Créer la requête
+        CreateStudentRequest request = createRequestFromRecord(studentRecord, offerId, classroomId);
+
+        // Vérifier si l'email existe déjà
+        if (studentRepository.existsByEmail(request.email())) {
+            failedRecords.add(new FailedImportRecord(
+                    studentRecord,
+                    "Un étudiant avec cet email existe déjà"
+            ));
+            return;
+        }
+
+        // Créer l'étudiant (avec son inscription)
+        studentService.createStudent(request);
+        log.info("Nouvel étudiant créé et inscrit à l'offre: {}", request.email());
+    }
+
+    /**
+     * Traite un étudiant existant (inscription seulement)
+     */
+    private void processExistingStudent(String matricule, String offerId, String classroomId,
+                                        List<FailedImportRecord> failedRecords) {
+        // Vérifier si l'étudiant existe avec ce matricule
+        Optional<Student> studentOpt = studentRepository.findByMatricule(matricule);
+
+        if (studentOpt.isEmpty()) {
+            throw new BusinessException(ErrorCode.STUDENT_NOT_FOUND,
+                    "Aucun étudiant trouvé avec ce matricule", Map.of("matricule", matricule));
+        }
+
+        Student student = studentOpt.get();
+
+        // Vérifier si l'étudiant est déjà inscrit à cette offre
+        TrainingOffer trainingOffer = trainingOfferRepository.findById(offerId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PROGRAM_LEVEL_NOT_FOUND,
+                        "Offre introuvable", Map.of("offerId", offerId)));
+
+        // Construire l'année académique actuelle
+        String academicYear = trainingOffer.getAcademicYear();
+
+        // Créer une inscription pour l'étudiant existant
+        try {
+            enrollmentService.enrollStudentToOffer(
+                    student.getId(),
+                    offerId,
+                    trainingOffer.getInstitutionId(),
+                    academicYear,
+                    classroomId
+            );
+            log.info("Étudiant existant inscrit à l'offre: {}", matricule);
+        } catch (EnrollmentAlreadyExistsException e) {
+            // L'étudiant est déjà inscrit à cette offre pour cette année
+            log.warn("L'étudiant est déjà inscrit à cette offre: {}", matricule);
+            throw e;
+        }
+    }
+
     /**
      * Récupère un champ obligatoire d'un enregistrement
      * @param entry Enregistrement
@@ -701,29 +551,9 @@ public class StudentImportService {
         return value;
     }
 
-    //    private void readData(List<String> headers, Iterator<Row> rowIterator, List<Map<String, String>> entries){
-//        while (rowIterator.hasNext()) {
-//            Row row = rowIterator.next();
-//
-//            // Vérifier si la ligne n'est pas vide
-//            boolean isEmpty = true;
-//            for (int i = 0; i < headers.size(); i++) {
-//                Cell cell = row.getCell(i);
-//                if (cell != null && cell.getCellType() != CellType.BLANK) {
-//                    isEmpty = false;
-//                    break;
-//                }
-//            }
-//
-//            if (isEmpty) {
-//                continue;
-//            }
-//
-//            var line = writeLines(headers, row);
-//            entries.add(line);
-//        }
-//
-//    }
+    /**
+     * Lit les données des lignes Excel
+     */
     private void readData(List<String> headers, Iterator<Row> rowIterator, List<Map<String, String>> entries) {
         while (rowIterator.hasNext()) {
             Row row = rowIterator.next();
@@ -747,65 +577,10 @@ public class StudentImportService {
         }
     }
 
-    //    private Map<String, String> writeLines(List<String> headers, Row row) {
-//        Map<String, String> line = new HashMap<>();
-//        for (int i = 0; i < headers.size(); i++) {
-//            Cell cell = row.getCell(i);
-//            String value = "";
-//
-//            if (cell != null) {
-//                switch (cell.getCellType()) {
-//                    case STRING:
-//                        value = cell.getStringCellValue().trim();
-//                        break;
-//                    case NUMERIC:
-//                        if (DateUtil.isCellDateFormatted(cell)) {
-//                            value = cell.getLocalDateTimeCellValue().toLocalDate().toString();
-//                        } else {
-//                            value = String.valueOf(cell.getNumericCellValue());
-//                        }
-//                        break;
-//                    case BOOLEAN:
-//                        value = String.valueOf(cell.getBooleanCellValue());
-//                        break;
-//                    default:
-//                        value = "";
-//                }
-//            }
-//            line.put(headers.get(i), value);
-//        }
-//        return line;
-//    }
-//    private Map<String, String> writeLines(List<String> headers, Row row) {
-//        Map<String, String> line = new HashMap<>();
-//        for (int i = 0; i < headers.size(); i++) {
-//            Cell cell = row.getCell(i);
-//            String value = "";
-//
-//            if (cell != null) {
-//                switch (cell.getCellType()) {
-//                    case STRING:
-//                        value = cell.getStringCellValue().trim();
-//                        break;
-//                    case NUMERIC:
-//                        if (DateUtil.isCellDateFormatted(cell)) {
-//                            value = cell.getLocalDateTimeCellValue().toLocalDate().toString();
-//                        } else {
-//                            value = String.valueOf(cell.getNumericCellValue());
-//                        }
-//                        break;
-//                    case BOOLEAN:
-//                        value = String.valueOf(cell.getBooleanCellValue());
-//                        break;
-//                    default:
-//                        value = "";
-//                }
-//            }
-//            line.put(headers.get(i), value);
-//        }
-//        return line;
-//    }
-    private Map<String, String> writeLines(List<String> headers, Row row){
+    /**
+     * Écrit les lignes de données
+     */
+    private Map<String, String> writeLines(List<String> headers, Row row) {
         Map<String, String> line = new HashMap<>();
         for (int i = 0; i < headers.size(); i++) {
             Cell cell = row.getCell(i);
@@ -820,7 +595,13 @@ public class StudentImportService {
                         if (DateUtil.isCellDateFormatted(cell)) {
                             value = cell.getLocalDateTimeCellValue().toLocalDate().toString();
                         } else {
-                            value = String.valueOf(cell.getNumericCellValue());
+                            // Gérer les nombres entiers pour éviter les .0
+                            double numericValue = cell.getNumericCellValue();
+                            if (numericValue == (long) numericValue) {
+                                value = String.valueOf((long) numericValue);
+                            } else {
+                                value = String.valueOf(numericValue);
+                            }
                         }
                         break;
                     case BOOLEAN:
@@ -865,66 +646,4 @@ public class StudentImportService {
 
         return cleaned;
     }
-    /**
-     * Traite un nouvel étudiant (création + inscription)
-     */
-    private void processNewStudent(Map<String, String> studentRecord, String programId, String classroomId,
-                                   List<FailedImportRecord> failedRecords) {
-        // Créer la requête
-        CreateStudentRequest request = createRequestFromRecord(studentRecord, programId, classroomId);
-
-        // Vérifier si l'email existe déjà
-        if (studentRepository.existsByEmail(request.email())) {
-            failedRecords.add(new FailedImportRecord(
-                    studentRecord,
-                    "Un étudiant avec cet email existe déjà"
-            ));
-            return;
-        }
-
-        // Créer l'étudiant (avec son inscription)
-        studentService.createStudent(request);
-        log.info("Nouvel étudiant créé et inscrit au programme: {}", request.email());
-    }
-
-    /**
-     * Traite un étudiant existant (inscription seulement)
-     */
-    private void processExistingStudent(String matricule, String programId, String classroomId,
-                                        List<FailedImportRecord> failedRecords) {
-        // Vérifier si l'étudiant existe avec ce matricule
-        Optional<Student> studentOpt = studentRepository.findByMatricule(matricule);
-
-        if (studentOpt.isEmpty()) {
-            throw new BusinessException(ErrorCode.STUDENT_NOT_FOUND,
-                    "Aucun étudiant trouvé avec ce matricule", Map.of("matricule", matricule));
-        }
-
-        Student student = studentOpt.get();
-
-        // Vérifier si l'étudiant est déjà inscrit à ce programme
-        ProgramLevel program = programLevelRepository.findById(programId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PROGRAM_LEVEL_NOT_FOUND,
-                        "Programme introuvable", Map.of("programId", programId)));
-
-        // Construire l'année académique actuelle
-        String academicYear = program.getAcademicYear();
-
-        // Créer une inscription pour l'étudiant existant
-        try {
-            enrollmentService.enrollStudentToProgram(
-                    student.getId(),
-                    programId,
-                    program.getInstitutionId(),
-                    academicYear,
-                    classroomId
-            );
-            log.info("Étudiant existant inscrit au programme: {}", matricule);
-        } catch (EnrollmentAlreadyExistsException e) {
-            // L'étudiant est déjà inscrit à ce programme pour cette année
-            log.warn("L'étudiant est déjà inscrit à ce programme: {}", matricule);
-            throw e;
-        }
-    }
-
 }

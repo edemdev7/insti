@@ -223,7 +223,7 @@ public class OfferEnrollmentService {
     private EnrollmentResponse mapToEnrollmentResponse(Enrollment enrollment, Student student, TrainingOffer offer) {
         return new EnrollmentResponse(
                 enrollment.getId(),
-                new StudentInfo(student.getId(), student.getFullName()),
+                new StudentInfo(student.getId(), student.getFullName(), null),
                 new OfferInfo(offer.getId(), offer.getLabel()),
                 enrollment.getInstitutionId(),
                 enrollment.getClassroomId(),

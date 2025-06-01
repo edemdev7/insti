@@ -18,14 +18,20 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * Contrôleur unifié pour la gestion des offres de formation
+ * Remplace les anciens ProgramController et TrainingOfferController
+ */
 @RestController
-@RequestMapping("/v1/institutions/{id}/offers")
+@RequestMapping("/v1/institutions/{institutionId}/offers")
 @RequiredArgsConstructor
 @Slf4j
-@Tag(name = "Offres de formation", description = "API pour la gestion des offres de formation")
+@Tag(name = "Offres de formation", description = "API unifiée pour la gestion des offres de formation et programmes")
 public class TrainingOfferController {
 
     private final TrainingOfferService trainingOfferService;
+
+    // ============ CRÉATION D'OFFRES ============
 
     @PostMapping
     @Operation(
@@ -108,7 +114,7 @@ public class TrainingOfferController {
                     required = true,
                     example = "664f82a9e9d034c2fca9b0e2"
             )
-            @PathVariable String id,
+            @PathVariable String institutionId,
 
             @Parameter(
                     description = "Données de l'offre à créer",
@@ -152,11 +158,45 @@ public class TrainingOfferController {
             )
             @Valid @RequestBody TrainingOfferCreateRequest request) {
 
-        log.info("Création d'une nouvelle offre pour l'institution {}: {}", id, request.label());
+        log.info("Création d'une nouvelle offre pour l'institution {}: {}", institutionId, request.label());
 
-        TrainingOfferResponse response = trainingOfferService.createTrainingOffer(id, request);
+        TrainingOfferResponse response = trainingOfferService.createTrainingOffer(institutionId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
+
+    // ============ ENDPOINT DE COMPATIBILITÉ POUR LES PROGRAMMES ============
+
+    @PostMapping("/programs")
+    @Operation(
+            summary = "Créer un programme (DÉPRÉCIÉ - Utiliser /offers)",
+            description = """
+                    **DÉPRÉCIÉ** : Utilisez POST /offers à la place.
+                    
+                    Cette méthode est maintenue pour la compatibilité ascendante.
+                    Elle crée une offre académique basée sur les paramètres du programme.
+                    """,
+            deprecated = true
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "Programme créé avec succès (en tant qu'offre académique)",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = TrainingOfferResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Données d'entrée invalides"),
+            @ApiResponse(responseCode = "404", description = "Institution introuvable")
+    })
+    public ResponseEntity<TrainingOfferResponse> createProgramLevel(
+            @Parameter(description = "ID de l'institution", required = true)
+            @PathVariable String institutionId,
+            @Valid @RequestBody ProgramLevelCreateRequest request
+    ) {
+        log.info("Requête de création d'un niveau pour l'institution {}: {}", institutionId, request.name());
+        log.warn("Utilisation de l'endpoint déprécié /programs - migrer vers /offers");
+
+        TrainingOfferResponse response = trainingOfferService.createProgramLevel(institutionId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    // ============ RÉCUPÉRATION D'OFFRES ============
 
     @GetMapping
     @Operation(
@@ -221,7 +261,7 @@ public class TrainingOfferController {
                     required = true,
                     example = "664f82a9e9d034c2fca9b0e2"
             )
-            @PathVariable String id,
+            @PathVariable String institutionId,
 
             @Parameter(description = "Type d'offre", example = "ACADEMIC")
             @RequestParam(required = false) String type,
@@ -242,15 +282,57 @@ public class TrainingOfferController {
             @RequestParam(required = false, defaultValue = "10") Integer size) {
 
         log.info("Récupération des offres pour l'institution {} avec filtres - type:{}, label:{}, code:{}, academicYear:{}",
-                id, type, label, code, academicYear);
+                institutionId, type, label, code, academicYear);
 
         TrainingOfferQueryParams queryParams = new TrainingOfferQueryParams(
                 type, label, code, academicYear, page, size
         );
 
-        TrainingOfferListResponse response = trainingOfferService.getTrainingOffers(id, queryParams);
+        TrainingOfferListResponse response = trainingOfferService.getTrainingOffers(institutionId, queryParams);
         return ResponseEntity.ok(response);
     }
+
+    // ============ ENDPOINT DE COMPATIBILITÉ POUR LES PROGRAMMES ============
+
+    @GetMapping("/programs")
+    @Operation(
+            summary = "Obtenir les programmes (DÉPRÉCIÉ - Utiliser /offers)",
+            description = """
+                    **DÉPRÉCIÉ** : Utilisez GET /offers avec type=ACADEMIC à la place.
+                    
+                    Récupère la liste paginée des offres académiques d'une institution, 
+                    filtrée par année académique si spécifiée, formatée comme des programmes.
+                    """,
+            deprecated = true
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Liste des programmes récupérée avec succès",
+                    content = @Content(mediaType = "application/json",
+                            schema = @Schema(implementation = PaginatedPrograms.class))),
+            @ApiResponse(responseCode = "404", description = "Institution introuvable")
+    })
+    public ResponseEntity<PaginatedPrograms> getProgramLevels(
+            @Parameter(description = "ID de l'institution", required = true)
+            @PathVariable String institutionId,
+
+            @Parameter(description = "Année académique (format: YYYY-YYYY)")
+            @RequestParam(required = false) String year,
+
+            @Parameter(description = "Numéro de page (commence à 0)")
+            @RequestParam(required = false, defaultValue = "0") int page,
+
+            @Parameter(description = "Nombre d'éléments par page")
+            @RequestParam(required = false, defaultValue = "20") int size
+    ) {
+        log.info("Requête de récupération des niveaux pour l'institution {}, année: {}, page: {}, taille: {}",
+                institutionId, year != null ? year : "toutes", page, size);
+        log.warn("Utilisation de l'endpoint déprécié /programs - migrer vers /offers?type=ACADEMIC");
+
+        PaginatedPrograms response = trainingOfferService.getProgramLevels(institutionId, year, page, size);
+        return ResponseEntity.ok(response);
+    }
+
+    // ============ DÉTAILS D'UNE OFFRE ============
 
     @GetMapping("/{offerId}")
     @Operation(
@@ -318,7 +400,7 @@ public class TrainingOfferController {
                     required = true,
                     example = "664f82a9e9d034c2fca9b0e2"
             )
-            @PathVariable String id,
+            @PathVariable String institutionId,
 
             @Parameter(
                     description = "Identifiant de l'offre",
@@ -327,11 +409,13 @@ public class TrainingOfferController {
             )
             @PathVariable String offerId) {
 
-        log.info("Récupération des détails de l'offre {} pour l'institution {}", offerId, id);
+        log.info("Récupération des détails de l'offre {} pour l'institution {}", offerId, institutionId);
 
-        TrainingOfferResponse response = trainingOfferService.getTrainingOfferDetails(id, offerId);
+        TrainingOfferResponse response = trainingOfferService.getTrainingOfferDetails(institutionId, offerId);
         return ResponseEntity.ok(response);
     }
+
+    // ============ MODIFICATION D'OFFRES ============
 
     @PutMapping("/{offerId}")
     @Operation(
@@ -383,7 +467,7 @@ public class TrainingOfferController {
                     required = true,
                     example = "664f82a9e9d034c2fca9b0e2"
             )
-            @PathVariable String id,
+            @PathVariable String institutionId,
 
             @Parameter(
                     description = "Identifiant de l'offre à modifier",
@@ -411,9 +495,9 @@ public class TrainingOfferController {
             )
             @Valid @RequestBody TrainingOfferUpdateRequest request) {
 
-        log.info("Mise à jour de l'offre {} pour l'institution {}", offerId, id);
+        log.info("Mise à jour de l'offre {} pour l'institution {}", offerId, institutionId);
 
-        TrainingOfferResponse response = trainingOfferService.updateTrainingOffer(id, offerId, request);
+        TrainingOfferResponse response = trainingOfferService.updateTrainingOffer(institutionId, offerId, request);
         return ResponseEntity.ok(response);
     }
 }

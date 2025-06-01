@@ -26,4 +26,19 @@ public record EnrollmentResponse(
 
         @Schema(description = "Statut de l'inscription", example = "ENROLLED")
         Enrollment.EnrollmentStatus status
-) {}
+) {
+    // Constructeur compact qui appelle le constructeur canonique
+    public EnrollmentResponse(String id, String studentId, String programLevelId, String academicYear,
+                              Enrollment.EnrollmentStatus status, LocalDateTime enrolledAt) {
+        this(
+                id,
+                new StudentInfo(studentId, null, null),  // Créer un StudentInfo avec l'ID uniquement
+                new OfferInfo(programLevelId, academicYear), // Créer un OfferInfo basique
+                null, // institutionId
+                null, // classroomId
+                enrolledAt,
+                status
+        );
+    }
+
+}

@@ -3,13 +3,12 @@ package com.payiskoul.institution.student.service;
 import com.payiskoul.institution.classroom.service.ClassroomService;
 import com.payiskoul.institution.exception.BusinessException;
 import com.payiskoul.institution.exception.ErrorCode;
-import com.payiskoul.institution.exception.ProgramLevelNotFoundException;
 import com.payiskoul.institution.exception.StudentAlreadyExistsException;
 import com.payiskoul.institution.exception.StudentNotFoundException;
 import com.payiskoul.institution.organization.model.Institution;
 import com.payiskoul.institution.organization.repository.InstitutionRepository;
-import com.payiskoul.institution.program.model.ProgramLevel;
-import com.payiskoul.institution.program.repository.ProgramLevelRepository;
+import com.payiskoul.institution.program.model.TrainingOffer;
+import com.payiskoul.institution.program.repository.TrainingOfferRepository;
 import com.payiskoul.institution.student.dto.CreateStudentRequest;
 import com.payiskoul.institution.student.dto.StudentResponse;
 import com.payiskoul.institution.student.model.Enrollment;
@@ -25,20 +24,23 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+/**
+ * Service d'étudiants mis à jour pour utiliser le modèle unifié TrainingOffer
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class StudentService {
 
     private final StudentRepository studentRepository;
-    private final ProgramLevelRepository programLevelRepository;
+    private final TrainingOfferRepository trainingOfferRepository; // Remplace ProgramLevelRepository
     private final InstitutionRepository institutionRepository;
     private final MatriculeGenerator matriculeGenerator;
     private final EnrollmentService enrollmentService;
     private final ClassroomService classroomService;
 
     /**
-     * Crée un nouvel étudiant et l'inscrit au programme spécifié
+     * Crée un nouvel étudiant et l'inscrit à l'offre spécifiée
      * @param request les données de l'étudiant
      * @return les informations de l'étudiant créé
      */
@@ -52,19 +54,20 @@ public class StudentService {
                     Map.of("email", request.email()));
         }
 
-        // Vérifier si le programme existe
-        ProgramLevel programLevel = programLevelRepository.findById(request.programId())
-                .orElseThrow(() -> new ProgramLevelNotFoundException("Le programme spécifié n'existe pas",
-                        Map.of("programId", request.programId())));
+        // Vérifier si l'offre existe (remplace la vérification de programme)
+        TrainingOffer trainingOffer = trainingOfferRepository.findById(request.programId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.PROGRAM_LEVEL_NOT_FOUND,
+                        "L'offre spécifiée n'existe pas",
+                        Map.of("offerId", request.programId())));
 
-        // Récupérer l'institution associée au programme
-        Institution institution = institutionRepository.findById(programLevel.getInstitutionId())
+        // Récupérer l'institution associée à l'offre
+        Institution institution = institutionRepository.findById(trainingOffer.getInstitutionId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.INSTITUTION_NOT_FOUND,
-                        "Institution introuvable pour le programme spécifié",
-                        Map.of("institutionId", programLevel.getInstitutionId())));
+                        "Institution introuvable pour l'offre spécifiée",
+                        Map.of("institutionId", trainingOffer.getInstitutionId())));
 
         // Récupérer le code du pays de l'institution
-        String countryCode = institution.getAddress().getCountry();
+        String countryCode = institution.getAddress() != null ? institution.getAddress().getCountry() : null;
 
         // Utiliser un code par défaut si celui de l'institution n'est pas disponible
         if (countryCode == null || countryCode.isEmpty()) {
@@ -95,11 +98,11 @@ public class StudentService {
         String classroomId = null;
         try {
             // Utiliser la classe spécifiée ou en trouver une automatiquement
-            classroomId = classroomService.addStudentToClassroom(programLevel.getId(), request.classroomId());
+            classroomId = classroomService.addStudentToClassroom(trainingOffer.getId(), request.classroomId());
             log.info("Étudiant assigné à la classe: {}", classroomId);
         } catch (BusinessException e) {
             if (e.getErrorCode() == ErrorCode.NO_CLASSROOM_AVAILABLE) {
-                log.warn("Aucune classe disponible pour ce programme: {}", programLevel.getId());
+                log.warn("Aucune classe disponible pour cette offre: {}", trainingOffer.getId());
             } else if (e.getErrorCode() == ErrorCode.CLASSROOM_FULL) {
                 log.warn("La classe spécifiée est complète: {}", request.classroomId());
             } else {
@@ -107,18 +110,18 @@ public class StudentService {
             }
         }
 
-        // Inscrire l'étudiant au programme spécifié
-        Enrollment enrollment = enrollmentService.enrollStudentToProgram(
+        // Inscrire l'étudiant à l'offre spécifiée
+        Enrollment enrollment = enrollmentService.enrollStudentToOffer(
                 savedStudent.getId(),
-                programLevel.getId(),
-                programLevel.getInstitutionId(),
-                programLevel.getAcademicYear(),
+                trainingOffer.getId(),
+                trainingOffer.getInstitutionId(),
+                trainingOffer.getAcademicYear(),
                 classroomId);
 
-        log.info("Étudiant inscrit avec succès au programme. Enrollment ID: {}", enrollment.getId());
+        log.info("Étudiant inscrit avec succès à l'offre. Enrollment ID: {}", enrollment.getId());
 
         // Retourner la réponse
-        return mapToStudentResponse(savedStudent, programLevel.getId());
+        return mapToStudentResponse(savedStudent, trainingOffer.getId());
     }
 
     /**
@@ -135,9 +138,9 @@ public class StudentService {
                 .orElseThrow(() -> new StudentNotFoundException("Aucun étudiant trouvé avec ce matricule",
                         Map.of("matricule", matricule)));
 
-        String programId = enrollmentService.getLatestProgramIdForStudent(student.getId());
+        String offerId = enrollmentService.getLatestOfferIdForStudent(student.getId());
 
-        return mapToStudentResponse(student, programId);
+        return mapToStudentResponse(student, offerId);
     }
 
     /**
@@ -162,10 +165,10 @@ public class StudentService {
     /**
      * Convertit une entité Student en DTO StudentResponse
      * @param student l'entité Student
-     * @param programId l'ID du programme
+     * @param offerId l'ID de l'offre (remplace programId)
      * @return le DTO StudentResponse
      */
-    private StudentResponse mapToStudentResponse(Student student, String programId) {
+    private StudentResponse mapToStudentResponse(Student student, String offerId) {
         return new StudentResponse(
                 student.getId(),
                 student.getMatricule(),
@@ -175,7 +178,7 @@ public class StudentService {
                 student.getEmail(),
                 student.getPhone(),
                 student.getRegisteredAt(),
-                programId
+                offerId // Maintient programId pour compatibilité mais contient offerId
         );
     }
 }

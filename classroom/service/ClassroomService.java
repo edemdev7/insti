@@ -8,67 +8,66 @@ import com.payiskoul.institution.classroom.model.Classroom;
 import com.payiskoul.institution.classroom.repository.ClassroomRepository;
 import com.payiskoul.institution.exception.BusinessException;
 import com.payiskoul.institution.exception.ErrorCode;
-import com.payiskoul.institution.exception.ProgramLevelNotFoundException;
-import com.payiskoul.institution.program.model.ProgramLevel;
-import com.payiskoul.institution.program.repository.ProgramLevelRepository;
+import com.payiskoul.institution.program.model.TrainingOffer;
+import com.payiskoul.institution.program.repository.TrainingOfferRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
+/**
+ * Service de classes mis à jour pour utiliser le modèle unifié TrainingOffer
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class ClassroomService {
 
     private final ClassroomRepository classroomRepository;
-    private final ProgramLevelRepository programLevelRepository;
+    private final TrainingOfferRepository trainingOfferRepository; // Remplace ProgramLevelRepository
 
     /**
-     * Crée une nouvelle classe pour un programme spécifique
+     * Crée une nouvelle classe pour une offre spécifique
      * @param institutionId ID de l'institution
-     * @param programId ID du programme
+     * @param offerId ID de l'offre (remplace programId)
      * @param request données de la classe à créer
      * @return les informations de la classe créée
      */
     @Transactional
-    @CacheEvict(value = "classrooms", key = "{#institutionId, #programId}")
-    public ClassroomResponse createClassroom(String institutionId, String programId, CreateClassroomRequest request) {
-        log.info("Création d'une nouvelle classe pour l'institution {} et le programme {}: {}",
-                institutionId, programId, request.name());
+    @CacheEvict(value = "classrooms", key = "{#institutionId, #offerId}")
+    public ClassroomResponse createClassroom(String institutionId, String offerId, CreateClassroomRequest request) {
+        log.info("Création d'une nouvelle classe pour l'institution {} et l'offre {}: {}",
+                institutionId, offerId, request.name());
 
-        // Vérifier que le programme existe et appartient à l'institution
-        ProgramLevel program = programLevelRepository.findById(programId)
-                .orElseThrow(() -> new ProgramLevelNotFoundException("Programme introuvable",
-                        Map.of("programId", programId)));
+        // Vérifier que l'offre existe et appartient à l'institution
+        TrainingOffer offer = trainingOfferRepository.findById(offerId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PROGRAM_LEVEL_NOT_FOUND,
+                        "Offre introuvable", Map.of("offerId", offerId)));
 
-        if (!program.getInstitutionId().equals(institutionId)) {
+        if (!offer.getInstitutionId().equals(institutionId)) {
             throw new BusinessException(ErrorCode.INVALID_INSTITUTION_PROGRAM,
-                    "Le programme spécifié n'appartient pas à cette institution",
+                    "L'offre spécifiée n'appartient pas à cette institution",
                     Map.of(
                             "institutionId", institutionId,
-                            "programId", programId,
-                            "programInstitutionId", program.getInstitutionId()
+                            "offerId", offerId,
+                            "offerInstitutionId", offer.getInstitutionId()
                     ));
         }
 
-        // Vérifier qu'une classe avec ce nom n'existe pas déjà pour ce programme
-        Optional<Classroom> existingClassroom = classroomRepository.findByNameAndProgramLevelId(request.name(), programId);
+        // Vérifier qu'une classe avec ce nom n'existe pas déjà pour cette offre
+        Optional<Classroom> existingClassroom = classroomRepository.findByNameAndProgramLevelId(request.name(), offerId);
         if (existingClassroom.isPresent()) {
             throw new BusinessException(ErrorCode.CLASSROOM_ALREADY_EXISTS,
-                    "Une classe avec ce nom existe déjà pour ce programme",
+                    "Une classe avec ce nom existe déjà pour cette offre",
                     Map.of(
                             "name", request.name(),
-                            "programId", programId
+                            "offerId", offerId
                     ));
         }
 
@@ -77,7 +76,7 @@ public class ClassroomService {
                 .name(request.name())
                 .capacity(request.capacity())
                 .currentCount(0) // Aucun étudiant au départ
-                .programLevelId(programId)
+                .programLevelId(offerId) // Garde le même nom de champ pour compatibilité DB
                 .institutionId(institutionId)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
@@ -88,52 +87,70 @@ public class ClassroomService {
         log.info("Classe créée avec succès: {}", savedClassroom.getId());
 
         // Retourner la réponse
-        return mapToClassroomResponse(savedClassroom, program.getName());
+        return mapToClassroomResponse(savedClassroom);
     }
 
     /**
-     * Récupère toutes les classes pour un programme spécifique
+     * Méthode de compatibilité - garde l'ancien nom mais utilise la nouvelle logique
+     */
+    @Transactional
+    @CacheEvict(value = "classrooms", key = "{#institutionId, #programId}")
+    public ClassroomResponse createClassroomForProgram(String institutionId, String programId, CreateClassroomRequest request) {
+        log.warn("Utilisation de la méthode dépréciée createClassroomForProgram - migrer vers createClassroom");
+        return createClassroom(institutionId, programId, request);
+    }
+
+    /**
+     * Récupère toutes les classes pour une offre spécifique
      * @param institutionId ID de l'institution
-     * @param programId ID du programme
+     * @param offerId ID de l'offre (remplace programId)
      * @return la liste des classes
      */
-    //@Cacheable(value = "classrooms", key = "{#institutionId, #programId}")
-    public ClassroomList getClassroomsByProgram(String institutionId, String programId) {
-        log.info("Récupération des classes pour l'institution {} et le programme {}", institutionId, programId);
+    public ClassroomList getClassroomsByOffer(String institutionId, String offerId) {
+        log.info("Récupération des classes pour l'institution {} et l'offre {}", institutionId, offerId);
 
-        // Vérifier que le programme existe
-        ProgramLevel program = programLevelRepository.findById(programId)
-                .orElseThrow(() -> new ProgramLevelNotFoundException("Programme introuvable",
-                        Map.of("programId", programId)));
+        // Vérifier que l'offre existe
+        TrainingOffer offer = trainingOfferRepository.findById(offerId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PROGRAM_LEVEL_NOT_FOUND,
+                        "Offre introuvable", Map.of("offerId", offerId)));
 
-        List<Classroom> classrooms = classroomRepository.findByInstitutionIdAndProgramLevelId(institutionId, programId);
+        List<Classroom> classrooms = classroomRepository.findByInstitutionIdAndProgramLevelId(institutionId, offerId);
         var totalStudents = classrooms.stream()
                 .mapToInt(Classroom::getCurrentCount)
                 .sum();
-        var programInfo = new ProgramInfo(program.getId(), program.getName(),program.getAcademicYear()
-                , program.getDuration(), program.getDurationUnit(), totalStudents);
+
+        var programInfo = new ProgramInfo(
+                offer.getId(),
+                offer.getLabel(),
+                offer.getAcademicYear(),
+                offer.getDuration(),
+                offer.getDurationUnit(),
+                totalStudents
+        );
+
         return new ClassroomList(programInfo, classrooms.stream()
-                .map(classroom -> mapToClassroomResponse(classroom, program.getName()))
+                .map(this::mapToClassroomResponse)
                 .toList());
     }
 
     /**
-     * Ajoute un étudiant à une classe disponible
-     * @param programId ID du programme
-     * @param classroomId ID de la classe (optionnel)
-     * @return l'ID de la classe où l'étudiant a été ajouté
-     * @throws BusinessException si aucune classe n'a de place disponible
+     * Méthode de compatibilité
      */
+    public ClassroomList getClassroomsByProgram(String institutionId, String programId) {
+        log.warn("Utilisation de la méthode dépréciée getClassroomsByProgram - migrer vers getClassroomsByOffer");
+        return getClassroomsByOffer(institutionId, programId);
+    }
+
     /**
      * Ajoute un étudiant à une classe disponible
-     * @param programId ID du programme
+     * @param offerId ID de l'offre (remplace programId)
      * @param classroomId ID de la classe (optionnel)
-     * @return l'ID de la classe où l'étudiant a été ajouté
+     * @return l'ID de la classe dans l'étudiant a été ajouté
      * @throws BusinessException si aucune classe n'a de place disponible
      */
     @Transactional
-    public String addStudentToClassroom(String programId, String classroomId) {
-        log.info("Ajout d'un étudiant à une classe pour le programme {}", programId);
+    public String addStudentToClassroom(String offerId, String classroomId) {
+        log.info("Ajout d'un étudiant à une classe pour l'offre {}", offerId);
 
         Classroom classroom;
 
@@ -143,14 +160,14 @@ public class ClassroomService {
                     .orElseThrow(() -> new BusinessException(ErrorCode.CLASSROOM_NOT_FOUND,
                             "Classe introuvable", Map.of("classroomId", classroomId)));
 
-            // Vérifier que la classe appartient au bon programme
-            if (!classroom.getProgramLevelId().equals(programId)) {
+            // Vérifier que la classe appartient à la bonne offre
+            if (!classroom.getProgramLevelId().equals(offerId)) {
                 throw new BusinessException(ErrorCode.INVALID_CLASSROOM_PROGRAM,
-                        "La classe spécifiée n'appartient pas à ce programme",
+                        "La classe spécifiée n'appartient pas à cette offre",
                         Map.of(
                                 "classroomId", classroomId,
-                                "programId", programId,
-                                "classroomProgramId", classroom.getProgramLevelId()
+                                "offerId", offerId,
+                                "classroomOfferId", classroom.getProgramLevelId()
                         ));
             }
 
@@ -167,10 +184,10 @@ public class ClassroomService {
         } else {
             // Sinon, trouver une classe avec de la place disponible
             classroom = classroomRepository.findFirstByProgramLevelIdAndCurrentCountLessThan(
-                            programId, Integer.MAX_VALUE)
+                            offerId, Integer.MAX_VALUE)
                     .orElseThrow(() -> new BusinessException(ErrorCode.NO_CLASSROOM_AVAILABLE,
-                            "Aucune classe disponible pour ce programme",
-                            Map.of("programId", programId)));
+                            "Aucune classe disponible pour cette offre",
+                            Map.of("offerId", offerId)));
         }
 
         // Incrémenter le nombre d'étudiants
@@ -205,10 +222,9 @@ public class ClassroomService {
     /**
      * Convertit une entité Classroom en DTO ClassroomResponse
      * @param classroom entité Classroom
-     * @param programName nom du programme
      * @return DTO ClassroomResponse
      */
-    private ClassroomResponse mapToClassroomResponse(Classroom classroom, String programName) {
+    private ClassroomResponse mapToClassroomResponse(Classroom classroom) {
         return new ClassroomResponse(
                 classroom.getId(),
                 classroom.getName(),

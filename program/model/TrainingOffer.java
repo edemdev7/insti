@@ -13,7 +13,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * Entité représentant une offre de formation
+ * Entité unifiée représentant une offre de formation
+ * Remplace les anciens ProgramLevel et TrainingOffer
  * Peut être de type ACADEMIC ou PROFESSIONAL
  */
 @Getter
@@ -36,7 +37,7 @@ public class TrainingOffer implements Serializable {
     private String code;
 
     /**
-     * Libellé de l'offre (ex : "Licence 1 Informatique")
+     * Libellé de l'offre (ex : "Licence 1 Informatique")
      */
     private String label;
 
@@ -77,7 +78,7 @@ public class TrainingOffer implements Serializable {
     private String certification;
 
     /**
-     * Année académique (format : 2024-2025 pour ACADEMIC, 2024 pour PROFESSIONAL)
+     * Année académique (format : 2024-2025 pour ACADEMIC, 2024 pour PROFESSIONAL)
      */
     private String academicYear;
 
@@ -96,4 +97,40 @@ public class TrainingOffer implements Serializable {
 
     @LastModifiedDate
     private LocalDateTime updatedAt;
+
+    // Méthodes utilitaires pour la compatibilité
+
+    /**
+     * Méthode de compatibilité - retourne le label comme nom
+     */
+    public String getName() {
+        return this.label;
+    }
+
+    /**
+     * Méthode de compatibilité - définit le label comme nom
+     */
+    public void setName(String name) {
+        this.label = name;
+    }
+
+    /**
+     * Méthode de compatibilité pour les frais sous forme d'objet Tuition
+     */
+    public Tuition getTuition() {
+        return Tuition.builder()
+                .amount(this.tuitionAmount)
+                .currency(this.currency)
+                .build();
+    }
+
+    /**
+     * Méthode de compatibilité pour définir les frais
+     */
+    public void setTuition(Tuition tuition) {
+        if (tuition != null) {
+            this.tuitionAmount = tuition.getAmount();
+            this.currency = tuition.getCurrency();
+        }
+    }
 }

@@ -30,6 +30,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Service unifié pour la gestion des offres de formation
+ * Remplace l'ancien ProgramService et enrichit TrainingOfferService
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -40,8 +44,10 @@ public class TrainingOfferService {
     private final ClassroomRepository classroomRepository;
     private final EnrollmentRepository enrollmentRepository;
 
+    // ============ CRÉATION D'OFFRES ============
+
     /**
-     * Crée une nouvelle offre de formation
+     * Crée une nouvelle offre de formation (unifie la création de programmes et d'offres)
      */
     @Transactional
     @CacheEvict(value = "trainingOffers", key = "{#institutionId, '*'}")
@@ -98,6 +104,31 @@ public class TrainingOfferService {
     }
 
     /**
+     * Méthode de compatibilité pour créer une offre à partir d'une requête de programme
+     */
+    @Transactional
+    @CacheEvict(value = "trainingOffers", key = "{#institutionId, '*'}")
+    public TrainingOfferResponse createProgramLevel(String institutionId, ProgramLevelCreateRequest request) {
+        log.info("Création d'un niveau pour l'institution {}: {}", institutionId, request.name());
+
+        // Convertir la requête de programme en requête d'offre
+        TrainingOfferCreateRequest offerRequest = new TrainingOfferCreateRequest(
+                request.name(),
+                OfferType.ACADEMIC, // Les programmes sont toujours académiques
+                null, // description
+                request.duration(),
+                request.durationUnit(),
+                request.tuition().amount(),
+                request.certification(),
+                request.academicYear()
+        );
+
+        return createTrainingOffer(institutionId, offerRequest);
+    }
+
+    // ============ RÉCUPÉRATION D'OFFRES ============
+
+    /**
      * Récupère les offres d'une institution avec filtres
      */
     @Cacheable(value = "trainingOffers", key = "{#institutionId, #queryParams.hashCode()}")
@@ -135,6 +166,41 @@ public class TrainingOfferService {
     }
 
     /**
+     * Méthode de compatibilité pour récupérer les offres comme des programmes
+     */
+    @Cacheable(value = "trainingOffers", key = "{#institutionId, #academicYear, #page, #size}")
+    public PaginatedPrograms getProgramLevels(String institutionId, String academicYear, int page, int size) {
+        log.info("Récupération des niveaux pour l'institution {} et l'année {}, page {} taille {}",
+                institutionId, academicYear != null ? academicYear : "toutes les années", page, size);
+
+        // Créer les paramètres de requête
+        TrainingOfferQueryParams queryParams = new TrainingOfferQueryParams(
+                "ACADEMIC", // Seulement les offres académiques pour les programmes
+                null, // label
+                null, // code
+                academicYear,
+                page,
+                size
+        );
+
+        // Récupérer les offres
+        TrainingOfferListResponse offersResponse = getTrainingOffers(institutionId, queryParams);
+
+        // Convertir en réponse de programmes
+        List<ProgramLevelResponse> programResponses = offersResponse.offers().stream()
+                .map(this::mapToProgramResponse)
+                .collect(Collectors.toList());
+
+        return new PaginatedPrograms(
+                offersResponse.page(),
+                offersResponse.size(),
+                offersResponse.totalElements(),
+                offersResponse.totalPages(),
+                programResponses
+        );
+    }
+
+    /**
      * Récupère les détails d'une offre
      */
     @Cacheable(value = "trainingOffer", key = "{#institutionId, #offerId}")
@@ -160,6 +226,8 @@ public class TrainingOfferService {
 
         return mapToResponseWithDetails(offer, institution);
     }
+
+    // ============ MODIFICATION D'OFFRES ============
 
     /**
      * Met à jour une offre existante
@@ -360,6 +428,8 @@ public class TrainingOfferService {
         }
     }
 
+    // ============ MÉTHODES DE MAPPING ============
+
     /**
      * Mappe une offre vers le DTO de réponse complet
      */
@@ -421,7 +491,6 @@ public class TrainingOfferService {
         );
     }
 
-
     /**
      * Mappe une offre vers le DTO de résumé
      */
@@ -434,6 +503,24 @@ public class TrainingOfferService {
                 offer.getAcademicYear(),
                 offer.getTuitionAmount(),
                 offer.getCurrency()
+        );
+    }
+
+    /**
+     * Mappe une offre vers le DTO de réponse de programme (compatibilité)
+     */
+    private ProgramLevelResponse mapToProgramResponse(TrainingOfferSummary offer) {
+        return new ProgramLevelResponse(
+                offer.id(),
+                "", // institutionId - sera rempli si nécessaire
+                offer.code(),
+                offer.label(), // name = label
+                offer.academicYear(),
+                offer.tuitionAmount(),
+                offer.currency(),
+                1, // duration par défaut
+                DurationUnit.YEAR, // durationUnit par défaut
+                "" // certification par défaut
         );
     }
 }
