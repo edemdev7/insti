@@ -1,0 +1,98 @@
+spring:
+  application:
+    name: institution-service
+  # La configuration Consul est déjà définie dans bootstrap.yml
+  cloud:
+    consul:
+      enabled: ${CONSUL_ENABLED:true}  # Permet de désactiver complètement Consul
+      host: consul
+      port: ${CONSUL_PORT:8500}
+      discovery:
+        enabled: ${CONSUL_DISCOVERY_ENABLED:true}  # Contrôle juste la découverte
+        service-name: ${spring.application.name}
+        instance-id: ${spring.application.name}:${random.value}  # Format plus simple
+        prefer-ip-address: true
+        health-check-path: /actuator/health
+        health-check-interval: 15s
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://payiskoul-mongodb:27017/payiskoul_institutions}
+      auto-index-creation: true
+      # Configuration pour la résilience
+      connection-pool-size: 20
+      connect-timeout: 5000
+      socket-timeout: 5000
+      retry-writes: true
+      write-concern: MAJORITY
+      read-concern: MAJORITY
+
+  redis:
+    host: ${REDIS_HOST:payiskoul-redis}
+    port: ${REDIS_PORT:6379}
+    timeout: 10000
+    connect-timeout: 10000
+    # Configuration pour la résilience
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 2
+        max-wait: -1ms
+    password: ${REDIS_PASSWORD:}  # Mot de passe optionnel
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:payiskoul-rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    # Configuration de la résilience
+    connection-timeout: 5000
+    requested-heartbeat: 60
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        retry:
+          enabled: true
+          initial-interval: 1000
+          max-attempts: 3
+          multiplier: 1.5
+          max-interval: 10000
+        acknowledge-mode: manual
+        prefetch: 1
+        default-requeue-rejected: false
+
+  cache:
+    type: redis
+    redis:
+      time-to-live: 3600000 # 1 heure
+      cache-null-values: false
+      key-prefix: "instsvc:"
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      mongodbService:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10000
+        permittedNumberOfCallsInHalfOpenState: 3
+        registerHealthIndicator: true
+      redisCache:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 5000
+        permittedNumberOfCallsInHalfOpenState: 2
+        registerHealthIndicator: true
+
+  retry:
+    instances:
+      mongodbService:
+        maxAttempts: 3
+        waitDuration: 1000
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+      redisCache:
+        maxAttempts: 2
+        waitDuration: 500

@@ -1,0 +1,148 @@
+services:
+  # Service d'application - API de gestion des institutions
+#  payiskoul-institution-service:
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+#    container_name: payiskoul-institution-service
+#    ports:
+#      - "8080:8080"
+#    environment:
+#      - SPRING_DATA_MONGODB_URI=mongodb://mongodb:27017/payiskoul_institutions
+#      - SPRING_REDIS_HOST=redis
+#      - SPRING_REDIS_PORT=6379
+#      - SPRING_RABBITMQ_HOST=rabbitmq
+#      - SPRING_RABBITMQ_PORT=5672
+#      - SPRING_RABBITMQ_USERNAME=guest
+#      - SPRING_RABBITMQ_PASSWORD=guest
+#      - JAVA_OPTS=-Xms256m -Xmx512m
+#    depends_on:
+#      - mongodb
+#      - redis
+#      - rabbitmq
+#    networks:
+#      - payiskoul-network
+#    restart: unless-stopped
+#    healthcheck:
+#      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+#      interval: 30s
+#      timeout: 10s
+#      retries: 3
+#      start_period: 40s
+  consul:
+    image: hashicorp/consul:1.17.2
+    container_name: consul
+    ports:
+      - "8500:8500"  # Interface web de Consul
+      - "8600:8600/udp"  # Port DNS de Consul
+    command: "agent -server -bootstrap-expect=1 -ui -client=0.0.0.0"
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+
+  # Base de données MongoDB
+  mongodb:
+    image: mongo:7
+    container_name: payiskoul-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=payiskoul_institutions
+#    volumes:
+#      - mongodb-data:/data/db
+    networks:
+      - payiskoul-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # Cache Redis
+  redis:
+    image: redis:7.0-alpine
+    container_name: payiskoul-redis
+    ports:
+      - "6379:6379"
+#    volumes:
+#      - redis-data:/data
+    networks:
+      - payiskoul-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    command: redis-server --appendonly yes
+
+  # Message broker RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: payiskoul-rabbitmq
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI port
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - payiskoul-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+#  # Interface de monitoring Prometheus (optionnel)
+#  prometheus:
+#    image: prom/prometheus:latest
+#    container_name: payiskoul-prometheus
+#    ports:
+#      - "9090:9090"
+#    volumes:
+#      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+#      - prometheus-data:/prometheus
+#    command:
+#      - '--config.file=/etc/prometheus/prometheus.yml'
+#      - '--storage.tsdb.path=/prometheus'
+#      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+#      - '--web.console.templates=/usr/share/prometheus/consoles'
+#    networks:
+#      - payiskoul-network
+#    restart: unless-stopped
+#
+#  # Tableau de bord Grafana (optionnel)
+#  grafana:
+#    image: grafana/grafana:latest
+#    container_name: payiskoul-grafana
+#    ports:
+#      - "3000:3000"
+#    environment:
+#      - GF_SECURITY_ADMIN_USER=admin
+#      - GF_SECURITY_ADMIN_PASSWORD=admin
+#      - GF_USERS_ALLOW_SIGN_UP=false
+#    volumes:
+#      - grafana-data:/var/lib/grafana
+#    networks:
+#      - payiskoul-network
+#    depends_on:
+#      - prometheus
+#    restart: unless-stopped
+
+volumes:
+#  mongodb-data:
+#  redis-data:
+  rabbitmq-data:
+#  prometheus-data:
+#  grafana-data:
+
+networks:
+  payiskoul-network:
+    driver: bridge

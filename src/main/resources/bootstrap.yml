@@ -1,0 +1,27 @@
+# src/main/resources/bootstrap.yml
+spring:
+  application:
+    name: institution-service  # Pas de guillemets nécessaires
+
+  profiles:
+    active: local  # Définir ici quel profil est actif par défaut
+
+  cloud:
+    consul:
+      enabled: ${CONSUL_ENABLED:true}  # Permet de désactiver complètement Consul
+      host: ${CONSUL_HOST}
+      port: ${CONSUL_PORT:8500}
+      discovery:
+        enabled: ${CONSUL_DISCOVERY_ENABLED:true}  # Contrôle juste la découverte
+        service-name: ${spring.application.name}
+        instance-id: ${spring.application.name}:${random.value}  # Format plus simple
+        prefer-ip-address: true
+        health-check-path: /actuator/health
+        health-check-interval: 15s
+#        register: ${CONSUL_REGISTER:true}  # Contrôle l'enregistrement
+#        deregister: ${CONSUL_DEREGISTER:true}  # Contrôle la désinscription
+#      config:
+#        enabled: ${CONSUL_CONFIG_ENABLED:true}  # Activer la configuration centralisée via Consul
+#        format: YAML   # Format des configurations
+#        watch:
+#          enabled: true  # Rafraîchissement automatique en cas de changement

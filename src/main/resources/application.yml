@@ -1,0 +1,69 @@
+server:
+  port: 8080
+  #  servlet:
+  #    context-path: /
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/plain
+    min-response-size: 2048
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,loggers
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true
+
+# Configuration Swagger/OpenAPI
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    disable-swagger-default-url: true
+  show-actuator: true
+
+# Configuration des logs
+logging:
+  level:
+    root: INFO
+    com.payiskoul: DEBUG
+    org.springframework.data.mongodb: INFO
+    org.springframework.cache: INFO
+    org.springframework.security: INFO
+  file:
+    name: ${LOG_PATH:/tmp}/payiskoul-institution-service.log
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %highlight{%-5level} %cyan{%logger{36}} - %msg%n"
+
+payiskoul:
+  institution:
+    matricule:
+      prefix: PI-CI
+      random-digits: 4
+    cache:
+      ttl: 3600 # secondes
+    rate-limiting: # Limites de débit
+      enabled: true
+      limit: 100
+      duration: 60 # secondes
+  services:
+    identity:
+      url: ${IDENTITY_SERVICE_URL:http://localhost:8080}
+      register-endpoint: /auth/register
+
+  core:
+    banking:
+      domain: localhost:9000

@@ -1,0 +1,1 @@
+./mvnw clean package && docker build -t institution-service:latest .
