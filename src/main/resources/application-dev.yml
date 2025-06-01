@@ -4,13 +4,13 @@ spring:
   # La configuration Consul est déjà définie dans bootstrap.yml
   cloud:
     consul:
-      enabled: ${CONSUL_ENABLED:true}  # Permet de désactiver complètement Consul
-      host: consul
+      enabled: false  # Désactivé par défaut
+      host: ${CONSUL_HOST:localhost}
       port: ${CONSUL_PORT:8500}
       discovery:
-        enabled: ${CONSUL_DISCOVERY_ENABLED:true}  # Contrôle juste la découverte
+        enabled: false  # Désactivé par défaut
         service-name: ${spring.application.name}
-        instance-id: ${spring.application.name}:${random.value}  # Format plus simple
+        instance-id: ${spring.application.name}-${server.port:8081}-${random.value}
         prefer-ip-address: true
         health-check-path: /actuator/health
         health-check-interval: 15s

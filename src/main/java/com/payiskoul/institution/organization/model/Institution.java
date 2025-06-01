@@ -20,6 +20,8 @@ public class Institution implements Serializable {
 
     private String userId;
 
+    private String externalId;
+
     private String name;
     private String acronym;
 

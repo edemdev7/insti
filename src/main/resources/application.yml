@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 8081
   #  servlet:
   #    context-path: /
   compression:
@@ -61,7 +61,7 @@ payiskoul:
       duration: 60 # secondes
   services:
     identity:
-      url: ${IDENTITY_SERVICE_URL:http://localhost:8080}
+      url: ${IDENTITY_SERVICE_URL:http://localhost:8081}
       register-endpoint: /auth/register
 
   core:

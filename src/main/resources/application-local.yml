@@ -1,27 +1,33 @@
+# src/main/resources/application-local.yml
 spring:
   application:
     name: institution-service
-  # La configuration de base de Consul est déjà définie dans bootstrap.yml
-#  cloud:
-#    consul:
-#      discovery:
-#        enabled: ${CONSUL_DISCOVERY_ENABLED:false}  # Désactivé par défaut en local
+  
+  # Désactiver complètement Consul
+  cloud:
+    consul:
+      enabled: false
+      discovery:
+        enabled: false
+    service-registry:
+      auto-registration:
+        enabled: false
 
+  # Configuration MongoDB locale
   data:
     mongodb:
       uri: mongodb://localhost:27017/payiskoul_institutions
       auto-index-creation: true
-      # Configuration pour le développement local
       connection-pool-size: 10
       connect-timeout: 5000
       socket-timeout: 5000
 
+  # Configuration Redis locale  
   redis:
     host: localhost
     port: 6379
     timeout: 10000
     connect-timeout: 10000
-    # Configuration pour le développement local
     lettuce:
       pool:
         max-active: 8
@@ -29,13 +35,13 @@ spring:
         min-idle: 2
         max-wait: -1ms
 
+  # Configuration RabbitMQ locale
   rabbitmq:
     host: localhost
     port: 5672
     username: guest
     password: guest
     virtual-host: /
-    # Configuration pour le développement local
     listener:
       simple:
         retry:
@@ -47,10 +53,17 @@ spring:
         prefetch: 1
         default-requeue-rejected: false
 
+  # Configuration cache
   cache:
     type: redis
     redis:
-      time-to-live: 3600000 # 1 heure
+      time-to-live: 3600000
       cache-null-values: false
       key-prefix: "instsvc_local:"
+  autoconfigure:
+    exclude:
+          - org.springframework.cloud.consul.serviceregistry.ConsulAutoServiceRegistrationAutoConfiguration
+          - org.springframework.cloud.consul.serviceregistry.ConsulServiceRegistryAutoConfiguration
+          - org.springframework.cloud.consul.discovery.ConsulDiscoveryClientConfiguration
 
+# Désactiver les auto-configurations problématiques
