@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 
 /**
  * Entité unifiée représentant une offre de formation
- * Supporte à la fois les offres académiques et professionnelles
+ * Équivalent du modèle Course de Django
  */
 @Getter
 @Setter
@@ -31,14 +31,18 @@ public class TrainingOffer implements Serializable {
 
     /**
      * Code généré automatiquement pour l'offre
-     * Format: TYPE_LEVEL-INSTITUTION_ACRONYM-YEAR (ex: LIC1-ESATIC-2025)
      */
     private String code;
 
     /**
-     * Libellé de l'offre (ex : "Licence 1 Informatique", "Formation DevOps")
+     * Libellé de l'offre (équivalent title dans Django)
      */
     private String label;
+
+    /**
+     * Sous-titre de l'offre
+     */
+    private String subtitle;
 
     /**
      * Type d'offre: ACADEMIC ou PROFESSIONAL
@@ -51,6 +55,34 @@ public class TrainingOffer implements Serializable {
     private String description;
 
     /**
+     * Image de couverture
+     */
+    private String coverImage;
+
+    /**
+     * Vidéo promotionnelle
+     */
+    private String promotionalVideo;
+
+    /**
+     * Modèle de tarification (FREE ou PAID)
+     */
+    @Builder.Default
+    private PricingModel pricingModel = PricingModel.FREE;
+
+    /**
+     * Montant des frais de formation
+     */
+    @Builder.Default
+    private BigDecimal tuitionAmount = BigDecimal.ZERO;
+
+    /**
+     * Devise des frais
+     */
+    @Builder.Default
+    private String currency = "XOF";
+
+    /**
      * Durée de la formation
      */
     private int duration;
@@ -61,47 +93,27 @@ public class TrainingOffer implements Serializable {
     private DurationUnit durationUnit;
 
     /**
-     * Montant des frais de formation
-     */
-    private BigDecimal tuitionAmount;
-
-    /**
-     * Devise des frais
-     */
-    @Builder.Default
-    private String currency = "XOF";
-
-    /**
      * Type de certification délivrée
      */
     private String certification;
 
     /**
-     * Année académique (format : 2024-2025 pour ACADEMIC, 2024 pour PROFESSIONAL)
+     * Année académique
      */
     private String academicYear;
+
+    /**
+     * Langue de l'offre
+     */
+    @Builder.Default
+    private String language = "Français";
 
     /**
      * ID de l'institution propriétaire
      */
     private String institutionId;
 
-    /**
-     * Date limite de dernière inscription
-     */
-    private LocalDateTime lastEnrollmentDate;
-
     // === CHAMPS SPÉCIFIQUES AUX OFFRES PROFESSIONNELLES ===
-
-    /**
-     * Image de couverture de l'offre
-     */
-    private String coverImage;
-
-    /**
-     * Vidéo promotionnelle
-     */
-    private String promotionalVideo;
 
     /**
      * Statut de publication
@@ -119,12 +131,6 @@ public class TrainingOffer implements Serializable {
      * Date d'approbation
      */
     private LocalDateTime approvalDate;
-
-    /**
-     * Langue de l'offre
-     */
-    @Builder.Default
-    private String language = "Français";
 
     /**
      * Prérequis pour l'offre
@@ -150,6 +156,11 @@ public class TrainingOffer implements Serializable {
      * Ressources incluses
      */
     private String includedResources;
+
+    /**
+     * Date limite de dernière inscription
+     */
+    private LocalDateTime lastEnrollmentDate;
 
     @CreatedDate
     private LocalDateTime createdAt;
@@ -222,5 +233,29 @@ public class TrainingOffer implements Serializable {
      */
     public boolean isAcademicOffer() {
         return this.offerType == OfferType.ACADEMIC;
+    }
+
+    /**
+     * Vérifie si l'offre est gratuite
+     */
+    public boolean isFree() {
+        return this.pricingModel == PricingModel.FREE ||
+                this.tuitionAmount.compareTo(BigDecimal.ZERO) == 0;
+    }
+
+    /**
+     * Vérifie si l'offre est payante
+     */
+    public boolean isPaid() {
+        return this.pricingModel == PricingModel.PAID &&
+                this.tuitionAmount.compareTo(BigDecimal.ZERO) > 0;
+    }
+
+    /**
+     * Modèles de tarification
+     */
+    public enum PricingModel {
+        FREE,   // Gratuit
+        PAID    // Payant
     }
 }
