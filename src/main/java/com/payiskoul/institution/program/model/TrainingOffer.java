@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 
 /**
  * Entité unifiée représentant une offre de formation
- * Équivalent du modèle Course de Django
+ * Équivalent du modèle Course de Django avec support complet des formations professionnelles
  */
 @Getter
 @Setter
@@ -162,6 +162,56 @@ public class TrainingOffer implements Serializable {
      */
     private LocalDateTime lastEnrollmentDate;
 
+    /**
+     * Niveau de difficulté (BEGINNER, INTERMEDIATE, ADVANCED)
+     */
+    private DifficultyLevel difficultyLevel;
+
+    /**
+     * Tags/mots-clés pour faciliter la recherche
+     */
+    private String[] tags;
+
+    /**
+     * Nombre maximum d'étudiants
+     */
+    private Integer maxStudents;
+
+    /**
+     * Support fourni (FORUM, EMAIL, LIVE_CHAT, NONE)
+     */
+    private SupportType supportType;
+
+    /**
+     * Certificat automatique à la fin
+     */
+    @Builder.Default
+    private Boolean automaticCertificate = false;
+
+    /**
+     * Score minimum pour obtenir le certificat (en %)
+     */
+    @Builder.Default
+    private Integer minimumScore = 70;
+
+    /**
+     * Offre recommandée/mise en avant
+     */
+    @Builder.Default
+    private Boolean isFeatured = false;
+
+    /**
+     * Note moyenne des évaluations
+     */
+    @Builder.Default
+    private Double averageRating = 0.0;
+
+    /**
+     * Nombre total d'évaluations
+     */
+    @Builder.Default
+    private Integer totalReviews = 0;
+
     @CreatedDate
     private LocalDateTime createdAt;
 
@@ -252,10 +302,85 @@ public class TrainingOffer implements Serializable {
     }
 
     /**
+     * Vérifie si l'offre accepte encore des inscriptions
+     */
+    public boolean isEnrollmentOpen() {
+        if (!isPublished || !isApproved) {
+            return false;
+        }
+
+        if (lastEnrollmentDate != null && LocalDateTime.now().isAfter(lastEnrollmentDate)) {
+            return false;
+        }
+
+        // Vérifier le nombre maximum d'étudiants si défini
+        if (maxStudents != null && getTotalStudents() >= maxStudents) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Met à jour la note moyenne
+     */
+    public void updateRating(double newRating) {
+        if (totalReviews == 0) {
+            this.averageRating = newRating;
+            this.totalReviews = 1;
+        } else {
+            double totalScore = this.averageRating * this.totalReviews;
+            this.totalReviews++;
+            this.averageRating = (totalScore + newRating) / this.totalReviews;
+        }
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    // === ENUMS ===
+
+    /**
      * Modèles de tarification
      */
     public enum PricingModel {
         FREE,   // Gratuit
         PAID    // Payant
+    }
+
+    /**
+     * Niveaux de difficulté
+     */
+    @Getter
+    public enum DifficultyLevel {
+        BEGINNER("Débutant"),
+        INTERMEDIATE("Intermédiaire"),
+        ADVANCED("Avancé"),
+        EXPERT("Expert");
+
+        private final String displayName;
+
+        DifficultyLevel(String displayName) {
+            this.displayName = displayName;
+        }
+
+    }
+
+    /**
+     * Types de support
+     */
+    @Getter
+    public enum SupportType {
+        NONE("Aucun support"),
+        FORUM("Forum communautaire"),
+        EMAIL("Support par email"),
+        LIVE_CHAT("Chat en direct"),
+        VIDEO_CALL("Appels vidéo"),
+        FULL("Support complet");
+
+        private final String displayName;
+
+        SupportType(String displayName) {
+            this.displayName = displayName;
+        }
+
     }
 }
