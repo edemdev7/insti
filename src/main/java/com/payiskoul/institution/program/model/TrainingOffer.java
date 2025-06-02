@@ -14,8 +14,7 @@ import java.time.LocalDateTime;
 
 /**
  * Entité unifiée représentant une offre de formation
- * Remplace les anciens ProgramLevel et TrainingOffer
- * Peut être de type ACADEMIC ou PROFESSIONAL
+ * Supporte à la fois les offres académiques et professionnelles
  */
 @Getter
 @Setter
@@ -37,7 +36,7 @@ public class TrainingOffer implements Serializable {
     private String code;
 
     /**
-     * Libellé de l'offre (ex : "Licence 1 Informatique")
+     * Libellé de l'offre (ex : "Licence 1 Informatique", "Formation DevOps")
      */
     private String label;
 
@@ -92,13 +91,73 @@ public class TrainingOffer implements Serializable {
      */
     private LocalDateTime lastEnrollmentDate;
 
+    // === CHAMPS SPÉCIFIQUES AUX OFFRES PROFESSIONNELLES ===
+
+    /**
+     * Image de couverture de l'offre
+     */
+    private String coverImage;
+
+    /**
+     * Vidéo promotionnelle
+     */
+    private String promotionalVideo;
+
+    /**
+     * Statut de publication
+     */
+    @Builder.Default
+    private Boolean isPublished = false;
+
+    /**
+     * Statut d'approbation
+     */
+    @Builder.Default
+    private Boolean isApproved = false;
+
+    /**
+     * Date d'approbation
+     */
+    private LocalDateTime approvalDate;
+
+    /**
+     * Langue de l'offre
+     */
+    @Builder.Default
+    private String language = "Français";
+
+    /**
+     * Prérequis pour l'offre
+     */
+    private String prerequisites;
+
+    /**
+     * Objectifs d'apprentissage
+     */
+    private String learningObjectives;
+
+    /**
+     * Public cible
+     */
+    private String targetAudience;
+
+    /**
+     * Modalités d'évaluation
+     */
+    private String assessmentMethods;
+
+    /**
+     * Ressources incluses
+     */
+    private String includedResources;
+
     @CreatedDate
     private LocalDateTime createdAt;
 
     @LastModifiedDate
     private LocalDateTime updatedAt;
 
-    // Méthodes utilitaires pour la compatibilité
+    // === MÉTHODES UTILITAIRES ===
 
     /**
      * Méthode de compatibilité - retourne le label comme nom
@@ -132,5 +191,36 @@ public class TrainingOffer implements Serializable {
             this.tuitionAmount = tuition.getAmount();
             this.currency = tuition.getCurrency();
         }
+    }
+
+    /**
+     * Approuve l'offre par un administrateur
+     */
+    public void approveOffer(String adminUser) {
+        this.isApproved = true;
+        this.approvalDate = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    /**
+     * Calcule le nombre total d'étudiants inscrits
+     */
+    public int getTotalStudents() {
+        // Cette méthode sera implémentée via le service
+        return 0;
+    }
+
+    /**
+     * Vérifie si l'offre est une formation professionnelle
+     */
+    public boolean isProfessionalOffer() {
+        return this.offerType == OfferType.PROFESSIONAL;
+    }
+
+    /**
+     * Vérifie si l'offre est une formation académique
+     */
+    public boolean isAcademicOffer() {
+        return this.offerType == OfferType.ACADEMIC;
     }
 }
