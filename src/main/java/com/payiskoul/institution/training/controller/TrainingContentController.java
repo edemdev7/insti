@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -198,5 +199,126 @@ public class TrainingContentController {
         log.info("Récupération de la progression pour l'inscription {}", enrollmentId);
         List<LectureProgressResponse> progress = trainingContentService.getProgressByEnrollment(enrollmentId);
         return ResponseEntity.ok(progress);
+    }
+    @GetMapping("/offers/{offerId}/content")
+    @Operation(
+            summary = "Récupérer le contenu complet d'une offre",
+            description = "Équivalent de CourseDetailView de Django - récupère sections, leçons et progression"
+    )
+    public ResponseEntity<TrainingOfferContentResponse> getOfferContent(
+            @PathVariable String offerId,
+            @RequestParam(required = false) String studentId) {
+
+        log.info("Récupération du contenu complet pour l'offre {} et l'étudiant {}", offerId, studentId);
+        TrainingOfferContentResponse response = trainingContentService.getOfferContent(offerId, studentId);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/offers/{offerId}/publish")
+    @Operation(
+            summary = "Publier une offre de formation",
+            description = "Équivalent de CoursePublishView de Django"
+    )
+    public ResponseEntity<PublishResponse> publishOffer(
+            @PathVariable String offerId,
+            @Valid @RequestBody PublishOfferRequest request) {
+
+        log.info("Publication de l'offre {}", offerId);
+        PublishResponse response = trainingContentService.publishOffer(offerId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/offers/{offerId}/approve")
+    @Operation(
+            summary = "Approuver une offre",
+            description = "Équivalent de CourseApprovalView de Django - admin uniquement"
+    )
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApprovalResponse> approveOffer(
+            @PathVariable String offerId,
+            @Valid @RequestBody ApprovalRequest request) {
+
+        log.info("Approbation de l'offre {} : {}", offerId, request.isApproved());
+        ApprovalResponse response = trainingContentService.approveOffer(offerId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    // ============ GESTION DES DOCUMENTS ============
+
+    @PostMapping("/offers/{offerId}/documents")
+    @Operation(summary = "Ajouter un document à une offre")
+    public ResponseEntity<DocumentResponse> addDocument(
+            @PathVariable String offerId,
+            @Valid @RequestBody CreateDocumentRequest request) {
+
+        DocumentResponse response = trainingContentService.addDocument(offerId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/offers/{offerId}/documents")
+    @Operation(summary = "Lister les documents d'une offre")
+    public ResponseEntity<List<DocumentResponse>> getDocuments(@PathVariable String offerId) {
+        List<DocumentResponse> documents = trainingContentService.getDocuments(offerId);
+        return ResponseEntity.ok(documents);
+    }
+
+    @GetMapping("/documents/{documentId}/download")
+    @Operation(summary = "Télécharger un document")
+    public ResponseEntity<Resource> downloadDocument(@PathVariable String documentId) {
+        return trainingContentService.downloadDocument(documentId);
+    }
+
+    // ============ STATISTIQUES ET RAPPORTS ============
+
+    @GetMapping("/offers/{offerId}/statistics")
+    @Operation(
+            summary = "Statistiques d'une offre",
+            description = "Équivalent de calculate_course_stats de Django"
+    )
+    public ResponseEntity<OfferStatisticsResponse> getOfferStatistics(@PathVariable String offerId) {
+        OfferStatisticsResponse stats = trainingContentService.calculateOfferStats(offerId);
+        return ResponseEntity.ok(stats);
+    }
+
+    @GetMapping("/institutions/{institutionId}/dashboard")
+    @Operation(
+            summary = "Tableau de bord du formateur",
+            description = "Équivalent de TrainerDashboardView de Django"
+    )
+    public ResponseEntity<InstitutionDashboardResponse> getInstitutionDashboard(
+            @PathVariable String institutionId) {
+
+        InstitutionDashboardResponse dashboard = trainingContentService.getInstitutionDashboard(institutionId);
+        return ResponseEntity.ok(dashboard);
+    }
+
+    @GetMapping("/students/{studentId}/dashboard")
+    @Operation(
+            summary = "Tableau de bord de l'étudiant",
+            description = "Équivalent de StudentDashboardView de Django"
+    )
+    public ResponseEntity<StudentDashboardResponse> getStudentDashboard(@PathVariable String studentId) {
+        StudentDashboardResponse dashboard = trainingContentService.getStudentDashboard(studentId);
+        return ResponseEntity.ok(dashboard);
+    }
+
+    // ============ RAPPORTS CSV ============
+
+    @GetMapping("/institutions/{institutionId}/reports/students")
+    @Operation(
+            summary = "Rapport CSV des étudiants",
+            description = "Équivalent de generate_student_report de Django"
+    )
+    public ResponseEntity<Resource> generateStudentReport(@PathVariable String institutionId) {
+        return trainingContentService.generateStudentReport(institutionId);
+    }
+
+    @GetMapping("/offers/{offerId}/reports/progress")
+    @Operation(
+            summary = "Rapport de progression pour une offre",
+            description = "Équivalent de generate_course_report de Django"
+    )
+    public ResponseEntity<Resource> generateProgressReport(@PathVariable String offerId) {
+        return trainingContentService.generateProgressReport(offerId);
     }
 }
