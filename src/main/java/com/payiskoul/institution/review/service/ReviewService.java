@@ -21,8 +21,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -122,4 +124,199 @@ public class ReviewService {
         List<Review> reviews = reviewRepository.findByTrainingOfferId(offerId);
 
         if (reviews.isEmpty()) {
-            return new ReviewStatisticsResponse(0.0, 0, Map.of
+            return new ReviewStatisticsResponse(0.0, 0, Map.of(), 0.0);
+        }
+
+        // Calculer la note moyenne
+        double averageRating = reviews.stream()
+                .mapToInt(Review::getRating)
+                .average()
+                .orElse(0.0);
+
+        // Distribution des notes
+        Map<Integer, Integer> ratingDistribution = reviews.stream()
+                .collect(Collectors.groupingBy(
+                        Review::getRating,
+                        Collectors.collectingAndThen(Collectors.counting(), Math::toIntExact)
+                ));
+
+        // Pourcentage de recommandations
+        long recommendedCount = reviews.stream()
+                .filter(review -> Boolean.TRUE.equals(review.getRecommended()))
+                .count();
+        double recommendationPercentage = (double) recommendedCount / reviews.size() * 100;
+
+        return new ReviewStatisticsResponse(
+                averageRating,
+                reviews.size(),
+                ratingDistribution,
+                recommendationPercentage
+        );
+    }
+
+    /**
+     * Récupère les avis laissés par un étudiant
+     */
+    public List<ReviewResponse> getReviewsByStudent(String studentId) {
+        log.info("Récupération des avis de l'étudiant {}", studentId);
+
+        // Récupérer toutes les inscriptions de l'étudiant
+        List<Enrollment> enrollments = enrollmentRepository.findByStudentId(studentId);
+
+        List<ReviewResponse> reviews = new ArrayList<>();
+
+        for (Enrollment enrollment : enrollments) {
+            Optional<Review> reviewOpt = reviewRepository.findByEnrollmentId(enrollment.getId());
+            if (reviewOpt.isPresent()) {
+                Review review = reviewOpt.get();
+                Student student = studentRepository.findById(studentId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.STUDENT_NOT_FOUND,
+                                "Étudiant introuvable", Map.of("studentId", studentId)));
+
+                TrainingOffer offer = trainingOfferRepository.findById(enrollment.getProgramLevelId())
+                        .orElseThrow(() -> new BusinessException(ErrorCode.PROGRAM_LEVEL_NOT_FOUND,
+                                "Offre introuvable", Map.of("offerId", enrollment.getProgramLevelId())));
+
+                reviews.add(mapToReviewResponse(review, student, offer));
+            }
+        }
+
+        return reviews;
+    }
+
+    /**
+     * Met à jour un avis existant
+     */
+    @Transactional
+    public ReviewResponse updateReview(String reviewId, UpdateReviewRequest request) {
+        log.info("Mise à jour de l'avis {}", reviewId);
+
+        Review review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PROGRAM_LEVEL_NOT_FOUND,
+                        "Avis introuvable", Map.of("reviewId", reviewId)));
+
+        // Mettre à jour les champs
+        if (request.rating() != null) {
+            review.setRating(request.rating());
+        }
+        if (request.comment() != null) {
+            review.setComment(request.comment());
+        }
+        if (request.recommended() != null) {
+            review.setRecommended(request.recommended());
+        }
+
+        review.setUpdatedAt(LocalDateTime.now());
+
+        Review updatedReview = reviewRepository.save(review);
+        log.info("Avis mis à jour avec succès: {}", updatedReview.getId());
+
+        // Mettre à jour les statistiques de l'offre
+        updateOfferRatingStats(review.getTrainingOfferId());
+
+        // Récupérer les informations pour la réponse
+        Student student = studentRepository.findById(review.getStudentId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.STUDENT_NOT_FOUND,
+                        "Étudiant introuvable", Map.of("studentId", review.getStudentId())));
+
+        TrainingOffer offer = trainingOfferRepository.findById(review.getTrainingOfferId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.PROGRAM_LEVEL_NOT_FOUND,
+                        "Offre introuvable", Map.of("offerId", review.getTrainingOfferId())));
+
+        return mapToReviewResponse(updatedReview, student, offer);
+    }
+
+    /**
+     * Supprime un avis
+     */
+    @Transactional
+    public void deleteReview(String reviewId) {
+        log.info("Suppression de l'avis {}", reviewId);
+
+        Review review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PROGRAM_LEVEL_NOT_FOUND,
+                        "Avis introuvable", Map.of("reviewId", reviewId)));
+
+        String offerId = review.getTrainingOfferId();
+        reviewRepository.delete(review);
+
+        // Mettre à jour les statistiques de l'offre
+        updateOfferRatingStats(offerId);
+
+        log.info("Avis supprimé avec succès: {}", reviewId);
+    }
+
+    /**
+     * Récupère l'avis d'une inscription spécifique
+     */
+    public ReviewResponse getReviewByEnrollment(String enrollmentId) {
+        log.info("Récupération de l'avis pour l'inscription {}", enrollmentId);
+
+        Review review = reviewRepository.findByEnrollmentId(enrollmentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PROGRAM_LEVEL_NOT_FOUND,
+                        "Aucun avis trouvé pour cette inscription", Map.of("enrollmentId", enrollmentId)));
+
+        return mapToReviewResponseWithDetails(review);
+    }
+
+// ============ MÉTHODES PRIVÉES ============
+
+    /**
+     * Met à jour les statistiques de notation d'une offre
+     */
+    private void updateOfferRatingStats(String offerId) {
+        List<Review> reviews = reviewRepository.findByTrainingOfferId(offerId);
+
+        if (!reviews.isEmpty()) {
+            double averageRating = reviews.stream()
+                    .mapToInt(Review::getRating)
+                    .average()
+                    .orElse(0.0);
+
+            // Mettre à jour l'offre avec les nouvelles statistiques
+            TrainingOffer offer = trainingOfferRepository.findById(offerId)
+                    .orElse(null);
+            if (offer != null) {
+                offer.updateRating(averageRating);
+                trainingOfferRepository.save(offer);
+            }
+        }
+    }
+
+    /**
+     * Mappe un avis vers le DTO de réponse avec détails complets
+     */
+    private ReviewResponse mapToReviewResponseWithDetails(Review review) {
+        // Récupérer l'étudiant
+        Student student = studentRepository.findById(review.getStudentId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.STUDENT_NOT_FOUND,
+                        "Étudiant introuvable", Map.of("studentId", review.getStudentId())));
+
+        // Récupérer l'offre
+        TrainingOffer offer = trainingOfferRepository.findById(review.getTrainingOfferId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.PROGRAM_LEVEL_NOT_FOUND,
+                        "Offre introuvable", Map.of("offerId", review.getTrainingOfferId())));
+
+        return mapToReviewResponse(review, student, offer);
+    }
+
+    /**
+     * Mappe un avis vers le DTO de réponse
+     */
+    private ReviewResponse mapToReviewResponse(Review review, Student student, TrainingOffer offer) {
+        StudentInfo studentInfo = new StudentInfo(
+                student.getId(),
+                student.getFullName(),
+                student.getMatricule()
+        );
+
+        return new ReviewResponse(
+                review.getId(),
+                studentInfo,
+                review.getRating(),
+                review.getComment(),
+                review.getRecommended(),
+                review.getCreatedAt()
+        );
+    }
+}
