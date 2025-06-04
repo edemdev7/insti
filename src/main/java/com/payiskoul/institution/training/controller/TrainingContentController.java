@@ -2,6 +2,8 @@ package com.payiskoul.institution.training.controller;
 
 import com.payiskoul.institution.exception.ErrorResponse;
 import com.payiskoul.institution.training.dto.*;
+import com.payiskoul.institution.training.model.TrainingQuiz;
+import com.payiskoul.institution.training.service.QuizService;
 import com.payiskoul.institution.training.service.TrainingContentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -16,8 +18,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 
 @RestController
@@ -28,6 +31,7 @@ import java.util.List;
 public class TrainingContentController {
 
     private final TrainingContentService trainingContentService;
+    private final QuizService quizService;
 
     // ============ GESTION DES SECTIONS ============
 
@@ -320,5 +324,52 @@ public class TrainingContentController {
     )
     public ResponseEntity<Resource> generateProgressReport(@PathVariable String offerId) {
         return trainingContentService.generateProgressReport(offerId);
+    }
+    // ============ GESTION DES QUIZ ============
+
+    @PostMapping("/sections/{sectionId}/quizzes")
+    @Operation(summary = "Créer un quiz pour une section")
+    public ResponseEntity<QuizResponse> createSectionQuiz(
+            @PathVariable String sectionId,
+            @Valid @RequestBody QuizCreateRequest request) {
+
+        QuizResponse response = quizService.createQuiz(sectionId, TrainingQuiz.ParentType.SECTION, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/lectures/{lectureId}/quizzes")
+    @Operation(summary = "Créer un quiz pour une lecture")
+    public ResponseEntity<QuizResponse> createLectureQuiz(
+            @PathVariable String lectureId,
+            @Valid @RequestBody QuizCreateRequest request) {
+
+        QuizResponse response = quizService.createQuiz(lectureId, TrainingQuiz.ParentType.LECTURE, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/quizzes/attempt")
+    @Operation(summary = "Soumettre une tentative de quiz")
+    public ResponseEntity<QuizAttemptResponse> submitQuizAttempt(
+            @Valid @RequestBody QuizAttemptRequest request) {
+
+        QuizAttemptResponse response = quizService.submitQuizAttempt(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/quizzes/{quizId}/attempts")
+    @Operation(summary = "Récupérer les tentatives d'un quiz")
+    public ResponseEntity<List<QuizAttemptResponse>> getQuizAttempts(
+            @PathVariable String quizId,
+            @RequestParam String enrollmentId) {
+
+        List<QuizAttemptResponse> attempts = quizService.getStudentQuizAttempts(enrollmentId, quizId);
+        return ResponseEntity.ok(attempts);
+    }
+
+    @GetMapping("/quizzes/{quizId}/statistics")
+    @Operation(summary = "Statistiques d'un quiz")
+    public ResponseEntity<QuizStatisticsResponse> getQuizStatistics(@PathVariable String quizId) {
+        QuizStatisticsResponse stats = quizService.getQuizStatistics(quizId);
+        return ResponseEntity.ok(stats);
     }
 }

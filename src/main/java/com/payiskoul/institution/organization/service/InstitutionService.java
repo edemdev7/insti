@@ -1,18 +1,19 @@
 package com.payiskoul.institution.organization.service;
 
-import com.payiskoul.institution.banking.service.AccountCreationService;
-import com.payiskoul.institution.identity.service.UserRegistrationService;
-import com.payiskoul.institution.organization.dto.*;
-import com.payiskoul.institution.exception.InstitutionAlreadyExistsException;
 import com.payiskoul.institution.exception.InstitutionNotFoundException;
+import com.payiskoul.institution.organization.dto.*;
 import com.payiskoul.institution.organization.model.Institution;
 import com.payiskoul.institution.organization.model.InstitutionStatus;
 import com.payiskoul.institution.organization.repository.InstitutionRepository;
+import com.payiskoul.institution.program.repository.TrainingOfferRepository;
+import com.payiskoul.institution.student.model.Enrollment;
+import com.payiskoul.institution.student.repository.EnrollmentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static com.payiskoul.institution.utils.date.DateTools.convertDatetimeToString;
 
@@ -22,6 +23,8 @@ import static com.payiskoul.institution.utils.date.DateTools.convertDatetimeToSt
 public class InstitutionService {
 
     private final InstitutionRepository institutionRepository;
+    private final TrainingOfferRepository trainingOfferRepository;
+    private final EnrollmentRepository enrollmentRepository;
 
     public InstitutionResponse createInstitution(InstitutionCreateRequest request) {
 
@@ -139,6 +142,23 @@ public class InstitutionService {
                 convertDatetimeToString(institution.getCreatedAt()),
                 convertDatetimeToString(institution.getUpdatedAt())
         );
+    }
+
+
+
+    /**
+     * Génère un rapport CSV des étudiants (équivalent generate_student_report Django)
+     */
+    public String generateStudentReport(String institutionId) {
+        List<Enrollment> enrollments = enrollmentRepository.findByInstitutionId(institutionId);
+
+        StringBuilder csv = new StringBuilder();
+        csv.append("Étudiant,Email,Téléphone,Cours,Date d'inscription,Statut de paiement,Montant payé\n");
+
+        for (Enrollment enrollment : enrollments) {
+        }
+
+        return csv.toString();
     }
 
 

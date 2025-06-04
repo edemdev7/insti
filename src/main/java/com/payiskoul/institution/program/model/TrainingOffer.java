@@ -383,4 +383,7 @@ public class TrainingOffer implements Serializable {
         }
 
     }
+    public void updateAverageRating() {
+        // Cette méthode sera appelée par ReviewService après chaque nouvel avis
+    }
 }

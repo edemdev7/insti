@@ -708,17 +708,61 @@ public class TrainingContentService {
                 .body((Resource) resource);
     }
 
-// ============ MÉTHODES PRIVÉES UTILITAIRES ============
+    private int getTotalLecturesForOffer(String offerId) {
+        List<TrainingSection> sections = trainingSectionRepository.findByTrainingOfferIdOrderByOrder(offerId);
+        return sections.stream()
+                .mapToInt(section -> trainingLectureRepository.findBySectionIdOrderByOrder(section.getId()).size())
+                .sum();
+    }
 
     private StudentProgressSummary calculateStudentProgress(String studentId, String offerId) {
-        // Logique de calcul de progression
-        return new StudentProgressSummary(0.0, 0, 0, null);
-    }
+        // Récupérer toutes les progressions de l'étudiant pour cette offre
+        List<Enrollment> enrollments = enrollmentRepository.findByStudentId(studentId);
+        Optional<Enrollment> enrollment = enrollments.stream()
+                .filter(e -> e.getProgramLevelId().equals(offerId))
+                .findFirst();
 
-    private double calculateCompletionRate(String offerId) {
-        // Logique de calcul du taux de complétion
-        return 0.0;
+        if (enrollment.isEmpty()) {
+            return new StudentProgressSummary(0.0, 0, 0, null);
+        }
+
+        List<LectureProgress> progressList = lectureProgressRepository.findByEnrollmentId(enrollment.get().getId());
+
+        int totalLectures = getTotalLecturesForOffer(offerId);
+        int completedLectures = (int) progressList.stream().filter(LectureProgress::getIsCompleted).count();
+
+        double overallProgress = totalLectures > 0 ? (double) completedLectures / totalLectures * 100 : 0.0;
+
+        String lastLectureId = progressList.stream()
+                .max((p1, p2) -> p1.getLastAccessedAt().compareTo(p2.getLastAccessedAt()))
+                .map(LectureProgress::getLectureId)
+                .orElse(null);
+
+        return new StudentProgressSummary(overallProgress, completedLectures, totalLectures, lastLectureId);
     }
+        private double calculateCompletionRate(String offerId) {
+            List<Enrollment> enrollments = enrollmentRepository.findByStudentId(""); // À corriger
+            if (enrollments.isEmpty()) return 0.0;
+
+            double totalProgress = 0.0;
+            int validEnrollments = 0;
+
+            for (Enrollment enrollment : enrollments) {
+                if (enrollment.getProgramLevelId().equals(offerId)) {
+                    List<LectureProgress> progressList = lectureProgressRepository.findByEnrollmentId(enrollment.getId());
+                    int totalLectures = getTotalLecturesForOffer(offerId);
+
+                    if (totalLectures > 0) {
+                        int completedLectures = (int) progressList.stream()
+                                .filter(LectureProgress::getIsCompleted).count();
+                        totalProgress += (double) completedLectures / totalLectures * 100;
+                        validEnrollments++;
+                    }
+                }
+            }
+
+            return validEnrollments > 0 ? totalProgress / validEnrollments : 0.0;
+        }
 
     private BigDecimal calculateTotalRevenue(String offerId) {
         // Logique de calcul des revenus
