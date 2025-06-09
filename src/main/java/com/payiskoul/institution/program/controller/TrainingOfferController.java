@@ -164,37 +164,6 @@ public class TrainingOfferController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    // ============ ENDPOINT DE COMPATIBILITÉ POUR LES PROGRAMMES ============
-
-    @PostMapping("/programs")
-    @Operation(
-            summary = "Créer un programme (DÉPRÉCIÉ - Utiliser /offers)",
-            description = """
-                    **DÉPRÉCIÉ** : Utilisez POST /offers à la place.
-                    
-                    Cette méthode est maintenue pour la compatibilité ascendante.
-                    Elle crée une offre académique basée sur les paramètres du programme.
-                    """,
-            deprecated = true
-    )
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Programme créé avec succès (en tant qu'offre académique)",
-                    content = @Content(mediaType = "application/json",
-                            schema = @Schema(implementation = TrainingOfferResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Données d'entrée invalides"),
-            @ApiResponse(responseCode = "404", description = "Institution introuvable")
-    })
-    public ResponseEntity<TrainingOfferResponse> createProgramLevel(
-            @Parameter(description = "ID de l'institution", required = true)
-            @PathVariable String institutionId,
-            @Valid @RequestBody ProgramLevelCreateRequest request
-    ) {
-        log.info("Requête de création d'un niveau pour l'institution {}: {}", institutionId, request.name());
-        log.warn("Utilisation de l'endpoint déprécié /programs - migrer vers /offers");
-
-        TrainingOfferResponse response = trainingOfferService.createProgramLevel(institutionId, request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
 
     // ============ RÉCUPÉRATION D'OFFRES ============
 
@@ -292,45 +261,6 @@ public class TrainingOfferController {
         return ResponseEntity.ok(response);
     }
 
-    // ============ ENDPOINT DE COMPATIBILITÉ POUR LES PROGRAMMES ============
-
-    @GetMapping("/programs")
-    @Operation(
-            summary = "Obtenir les programmes (DÉPRÉCIÉ - Utiliser /offers)",
-            description = """
-                    **DÉPRÉCIÉ** : Utilisez GET /offers avec type=ACADEMIC à la place.
-                    
-                    Récupère la liste paginée des offres académiques d'une institution, 
-                    filtrée par année académique si spécifiée, formatée comme des programmes.
-                    """,
-            deprecated = true
-    )
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Liste des programmes récupérée avec succès",
-                    content = @Content(mediaType = "application/json",
-                            schema = @Schema(implementation = PaginatedPrograms.class))),
-            @ApiResponse(responseCode = "404", description = "Institution introuvable")
-    })
-    public ResponseEntity<PaginatedPrograms> getProgramLevels(
-            @Parameter(description = "ID de l'institution", required = true)
-            @PathVariable String institutionId,
-
-            @Parameter(description = "Année académique (format: YYYY-YYYY)")
-            @RequestParam(required = false) String year,
-
-            @Parameter(description = "Numéro de page (commence à 0)")
-            @RequestParam(required = false, defaultValue = "0") int page,
-
-            @Parameter(description = "Nombre d'éléments par page")
-            @RequestParam(required = false, defaultValue = "20") int size
-    ) {
-        log.info("Requête de récupération des niveaux pour l'institution {}, année: {}, page: {}, taille: {}",
-                institutionId, year != null ? year : "toutes", page, size);
-        log.warn("Utilisation de l'endpoint déprécié /programs - migrer vers /offers?type=ACADEMIC");
-
-        PaginatedPrograms response = trainingOfferService.getProgramLevels(institutionId, year, page, size);
-        return ResponseEntity.ok(response);
-    }
 
     // ============ DÉTAILS D'UNE OFFRE ============
 
